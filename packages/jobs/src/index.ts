@@ -8,6 +8,9 @@ export const QUEUES = {
   videoTranscode: 'video-transcode',
 } as const;
 
+/** Every valid queue name, derived from QUEUES so a typo cannot reach enqueue(). */
+export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
+
 export interface JobDispatcher {
-  enqueue(queue: string, payload: unknown, opts?: { dedupeKey?: string }): Promise<void>;
+  enqueue(queue: QueueName, payload: unknown, opts?: { dedupeKey?: string }): Promise<void>;
 }

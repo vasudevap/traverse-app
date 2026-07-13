@@ -2,4 +2,5 @@
 import { QUEUES } from '@traverse/jobs';
 
 // pg-boss wiring lands with TRA-22; this proves the workspace graph compiles.
-console.log('@traverse/worker up. queues:', Object.values(QUEUES).join(', '));
+export const workerQueues = Object.values(QUEUES);
+console.log('@traverse/worker up. queues:', workerQueues.join(', '));
