@@ -18,5 +18,6 @@ pg-boss on AWS ECS Fargate; four Vite/React frontends.
 | packages/jobs                                           | JobDispatcher interface + queue names (D17)              |
 | packages/config                                         | Non-secret shared constants                              |
 
-Dev: `corepack enable && pnpm install && pnpm build`. Conventions: no em dashes
+Dev: `corepack enable && pnpm install && pnpm verify`. Local V15 defaults are listed
+in `.env.example`. Conventions: no em dashes
 anywhere; one teal action per view; see traverse-docs CLAUDE.md.
