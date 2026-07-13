@@ -9,6 +9,8 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "verify": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."
   },
