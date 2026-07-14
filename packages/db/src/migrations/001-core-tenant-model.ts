@@ -2,12 +2,14 @@ import { sql, type Kysely } from 'kysely';
 import type { Migration } from 'kysely/migration';
 
 async function up(database: Kysely<unknown>): Promise<void> {
-  await sql`SET LOCAL ROLE traverse_ddl`.execute(database);
-
   await sql`
     ALTER TABLE app.kysely_migration OWNER TO traverse_ddl;
     ALTER TABLE app.kysely_migration_lock OWNER TO traverse_ddl;
+  `.execute(database);
 
+  await sql`SET LOCAL ROLE traverse_ddl`.execute(database);
+
+  await sql`
     CREATE OR REPLACE FUNCTION app.current_client_id()
     RETURNS uuid
     LANGUAGE sql
