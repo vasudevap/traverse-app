@@ -8,6 +8,7 @@ export interface SqlClient {
 export interface RlsAuditOptions {
   schema: string;
   tenantTables: string[];
+  readOnlyTables?: string[];
   runtimeRole?: string;
   ddlRole?: string;
 }
@@ -36,6 +37,13 @@ interface PrivilegeAuditRow {
   can_truncate: boolean;
 }
 
+interface MutationPrivilegeRow {
+  table_name: string;
+  can_delete: boolean;
+  can_insert: boolean;
+  can_update: boolean;
+}
+
 interface OwnedTableRow {
   schema_name: string;
   table_name: string;
@@ -46,9 +54,19 @@ interface MembershipRow {
 }
 
 interface HelperAuditRow {
+  helper_name: string;
   owner_name: string;
   security_definer: boolean;
 }
+
+const REQUIRED_CONTEXT_HELPERS = [
+  'current_actor_id',
+  'current_actor_role',
+  'current_client_id',
+  'current_coach_id',
+  'current_practice_role',
+  'current_tenant_id',
+] as const;
 
 const UNSAFE_ROLE_FLAGS: Array<[keyof RoleAuditRow, string]> = [
   ['superuser', 'SUPERUSER'],
@@ -65,6 +83,7 @@ export async function auditRlsContract(
   const runtimeRole = options.runtimeRole ?? 'traverse_runtime';
   const ddlRole = options.ddlRole ?? 'traverse_ddl';
   const tenantTables = [...new Set(options.tenantTables)].sort();
+  const readOnlyTables = [...new Set(options.readOnlyTables ?? [])].sort();
   const errors: string[] = [];
 
   if (tenantTables.length === 0) {
@@ -196,6 +215,36 @@ export async function auditRlsContract(
     }
   }
 
+  const mutationPrivilegeResult = await client.query<MutationPrivilegeRow>(
+    `
+      SELECT
+        table_name,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'DELETE'
+        ) AS can_delete,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'INSERT'
+        ) AS can_insert,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'UPDATE'
+        ) AS can_update
+      FROM unnest($3::text[]) AS table_name
+      WHERE to_regclass(quote_ident($2) || '.' || quote_ident(table_name)) IS NOT NULL
+    `,
+    [runtimeRole, options.schema, readOnlyTables],
+  );
+  for (const row of mutationPrivilegeResult.rows) {
+    if (row.can_delete || row.can_insert || row.can_update) {
+      errors.push(`${runtimeRole}: ${options.schema}.${row.table_name} must be read-only.`);
+    }
+  }
+
   const ownershipResult = await client.query<OwnedTableRow>(
     `
       SELECT n.nspname AS schema_name, c.relname AS table_name
@@ -227,24 +276,30 @@ export async function auditRlsContract(
 
   const helperResult = await client.query<HelperAuditRow>(
     `
-      SELECT pg_get_userbyid(p.proowner) AS owner_name, p.prosecdef AS security_definer
+      SELECT
+        p.proname AS helper_name,
+        pg_get_userbyid(p.proowner) AS owner_name,
+        p.prosecdef AS security_definer
       FROM pg_proc AS p
       JOIN pg_namespace AS n ON n.oid = p.pronamespace
       WHERE n.nspname = $1
-        AND p.proname = 'current_tenant_id'
+        AND p.proname = ANY($2::text[])
         AND pg_get_function_identity_arguments(p.oid) = ''
     `,
-    [options.schema],
+    [options.schema, REQUIRED_CONTEXT_HELPERS],
   );
-  const helper = helperResult.rows[0];
-  if (helper === undefined) {
-    errors.push(`${options.schema}.current_tenant_id(): required RLS context helper is missing.`);
-  } else {
+  const helpersByName = new Map(helperResult.rows.map((row) => [row.helper_name, row]));
+  for (const helperName of REQUIRED_CONTEXT_HELPERS) {
+    const helper = helpersByName.get(helperName);
+    if (helper === undefined) {
+      errors.push(`${options.schema}.${helperName}(): required RLS context helper is missing.`);
+      continue;
+    }
     if (helper.owner_name !== ddlRole) {
-      errors.push(`${options.schema}.current_tenant_id(): owner must be ${ddlRole}.`);
+      errors.push(`${options.schema}.${helperName}(): owner must be ${ddlRole}.`);
     }
     if (helper.security_definer) {
-      errors.push(`${options.schema}.current_tenant_id(): SECURITY DEFINER is forbidden.`);
+      errors.push(`${options.schema}.${helperName}(): SECURITY DEFINER is forbidden.`);
     }
   }
 
