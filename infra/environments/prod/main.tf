@@ -82,6 +82,20 @@ module "database" {
   log_retention_days        = 90
 }
 
+module "storage" {
+  source = "../../modules/storage"
+
+  project                       = "traverse"
+  environment                   = "prod"
+  kms_key_arn                   = module.account_baseline.kms_key_arn
+  task_role_names               = module.account_baseline.task_role_names
+  cloudfront_public_key_pem     = file("${path.module}/cloudfront-public-key.pem")
+  video_cors_allowed_origins    = ["*"]
+  asset_cors_allowed_origins    = var.storage_asset_cors_allowed_origins
+  video_retention_backstop_days = 45
+  multipart_abort_days          = 7
+}
+
 output "baseline" {
   description = "Prod baseline resource identifiers."
   value = {
@@ -113,4 +127,9 @@ output "network" {
 output "database" {
   description = "Prod PostgreSQL foundation."
   value       = module.database.summary
+}
+
+output "storage" {
+  description = "Prod storage and private video delivery foundation."
+  value       = module.storage.summary
 }

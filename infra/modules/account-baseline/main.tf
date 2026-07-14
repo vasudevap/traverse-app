@@ -20,7 +20,7 @@ locals {
     video-worker = ["assemblyai", "database", "video"]
   }
 
-  direct_kms_roles = toset(["api", "worker"])
+  direct_kms_roles = toset(["api", "worker", "video-worker"])
 }
 
 resource "aws_kms_key" "application" {
@@ -61,6 +61,24 @@ resource "aws_kms_key" "application" {
         Condition = {
           ArnLike = {
             "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      },
+      {
+        Sid    = "AllowCloudFrontS3OriginDecrypt"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey*",
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "AWS:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"
           }
         }
       }
