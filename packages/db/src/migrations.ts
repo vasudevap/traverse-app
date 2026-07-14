@@ -17,7 +17,7 @@ const provider: MigrationProvider = {
   },
 };
 
-function migrator(database: Kysely<unknown>): Migrator {
+function migrator<DB>(database: Kysely<DB>): Migrator {
   return new Migrator({
     db: database,
     migrationTableSchema: 'app',
@@ -32,10 +32,10 @@ function assertResult(operation: string, result: MigrationResultSet): MigrationR
   return result.results ?? [];
 }
 
-export async function migrateToLatest(database: Kysely<unknown>): Promise<MigrationResult[]> {
+export async function migrateToLatest<DB>(database: Kysely<DB>): Promise<MigrationResult[]> {
   return assertResult('Database migration', await migrator(database).migrateToLatest());
 }
 
-export async function migrateToEmpty(database: Kysely<unknown>): Promise<MigrationResult[]> {
+export async function migrateToEmpty<DB>(database: Kysely<DB>): Promise<MigrationResult[]> {
   return assertResult('Database rollback', await migrator(database).migrateTo(NO_MIGRATIONS));
 }

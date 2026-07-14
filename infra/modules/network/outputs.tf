@@ -57,6 +57,7 @@ output "app_security_group_ids" {
     api          = aws_security_group.api.id
     worker       = aws_security_group.worker.id
     video-worker = aws_security_group.video_worker.id
+    migration    = aws_security_group.migration.id
   }
 }
 

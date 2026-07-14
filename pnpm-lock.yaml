@@ -166,6 +166,19 @@ importers:
         specifier: ^6.3.0
         version: 6.4.3(@types/node@22.20.1)(tsx@4.23.1)
 
+  apps/migrator:
+    dependencies:
+      '@traverse/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+
   apps/video-worker:
     dependencies:
       '@traverse/jobs':

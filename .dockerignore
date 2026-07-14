@@ -1,0 +1,10 @@
+.git
+.github
+.turbo
+**/dist
+**/node_modules
+infra
+coverage
+*.log
+*.pem
+*.private.pem

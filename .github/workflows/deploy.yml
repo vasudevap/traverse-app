@@ -1,0 +1,111 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - nonprod
+          - prod
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.target || 'nonprod' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-nonprod:
+    if: github.event_name == 'push' || inputs.target == 'nonprod'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AWS_ACCOUNT_ID: '124074140404'
+      AWS_REGION: us-east-1
+      DEPLOYMENT_ENVIRONMENT: nonprod
+      ECS_CLUSTER: traverse-nonprod-cluster
+      ROLE_TO_ASSUME: arn:aws:iam::124074140404:role/traverse-nonprod-github-deploy
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and publish immutable ARM64 images
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/traverse-nonprod-api:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/traverse-nonprod-worker:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/traverse-nonprod-video-worker:${{ github.sha }}
+
+      - name: Run DDL migration, then deploy healthy services
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: bash .github/scripts/deploy-ecs.sh
+
+  deploy-prod:
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'prod'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      AWS_ACCOUNT_ID: '491884381572'
+      AWS_REGION: us-east-1
+      DEPLOYMENT_ENVIRONMENT: prod
+      ECS_CLUSTER: traverse-prod-cluster
+      ROLE_TO_ASSUME: arn:aws:iam::491884381572:role/traverse-prod-github-deploy
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and publish immutable ARM64 images
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/traverse-prod-api:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/traverse-prod-worker:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/traverse-prod-video-worker:${{ github.sha }}
+
+      - name: Run DDL migration, then deploy healthy services
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: bash .github/scripts/deploy-ecs.sh
