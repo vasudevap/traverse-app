@@ -7,3 +7,9 @@ variable "vpc_cidr" {
   description = "NonProd VPC CIDR."
   type        = string
 }
+
+variable "database_bootstrap_host_enabled" {
+  description = "Temporarily create the private database role bootstrap host."
+  type        = bool
+  default     = false
+}

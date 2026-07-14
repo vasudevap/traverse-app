@@ -62,6 +62,26 @@ module "account_baseline" {
   secret_recovery_window_days = 7
 }
 
+module "database" {
+  source = "../../modules/database"
+
+  project                   = "traverse"
+  environment               = "nonprod"
+  infrastructure_profile    = var.infrastructure_profile
+  region                    = "us-east-1"
+  vpc_id                    = module.network.vpc_id
+  app_subnet_ids            = module.network.app_subnet_ids
+  data_subnet_ids           = module.network.data_subnet_ids
+  app_security_group_ids    = module.network.app_security_group_ids
+  kms_key_arn               = module.account_baseline.kms_key_arn
+  runtime_secret_arn        = module.account_baseline.secret_arns["database"]
+  migration_secret_arn      = module.account_baseline.secret_arns["database-migration"]
+  role_bootstrap_sql_base64 = filebase64("${path.module}/../../../packages/db/sql/roles-and-rls.sql")
+  bootstrap_host_enabled    = var.database_bootstrap_host_enabled
+  backup_retention_days     = 7
+  log_retention_days        = 30
+}
+
 output "baseline" {
   description = "NonProd baseline resource identifiers."
   value = {
@@ -88,4 +108,9 @@ output "network" {
     cloudflare_ipv4_cidrs  = module.network.cloudflare_ipv4_cidrs
     infrastructure_profile = module.network.infrastructure_profile
   }
+}
+
+output "database" {
+  description = "NonProd PostgreSQL foundation."
+  value       = module.database.summary
 }

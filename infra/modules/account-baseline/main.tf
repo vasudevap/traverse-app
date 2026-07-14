@@ -5,12 +5,13 @@ locals {
   name_prefix = "${var.project}-${var.environment}"
 
   secret_definitions = {
-    auth       = { description = "Authentication and session secrets" }
-    database   = { description = "Application database credentials" }
-    stripe     = { description = "Stripe API and webhook credentials" }
-    resend     = { description = "Resend email delivery credentials" }
-    assemblyai = { description = "AssemblyAI transcription credentials" }
-    video      = { description = "Video processing integration credentials" }
+    auth               = { description = "Authentication and session secrets" }
+    database           = { description = "Application runtime database credentials" }
+    database-migration = { description = "Database migration credentials, isolated from application tasks" }
+    stripe             = { description = "Stripe API and webhook credentials" }
+    resend             = { description = "Resend email delivery credentials" }
+    assemblyai         = { description = "AssemblyAI transcription credentials" }
+    video              = { description = "Video processing integration credentials" }
   }
 
   task_role_secret_access = {
@@ -42,6 +43,26 @@ resource "aws_kms_key" "application" {
         }
         Action   = "kms:*"
         Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogsEncryption"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt*",
+          "kms:Describe*",
+          "kms:Encrypt*",
+          "kms:GenerateDataKey*",
+          "kms:ReEncrypt*",
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
       }
     ]
   })

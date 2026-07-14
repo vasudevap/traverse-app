@@ -1,2 +1,9 @@
-/** Kysely schema, migrations, and RLS policies (TRA-18/TRA-25). Placeholder export. */
+/** Shared database and RLS foundations. Business schema migrations remain in TRA-25. */
 export const DB_PACKAGE = '@traverse/db';
+
+export {
+  assertRlsContract,
+  auditRlsContract,
+  type RlsAuditOptions,
+  type SqlClient,
+} from './rls-audit.js';

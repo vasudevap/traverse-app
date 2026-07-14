@@ -1,0 +1,142 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+umask 077
+
+REGION="${region}"
+DATABASE_HOST="${database_host}"
+DATABASE_PORT="${database_port}"
+DATABASE_NAME="${database_name}"
+MASTER_SECRET_ARN="${master_secret_arn}"
+RUNTIME_SECRET_ARN="${runtime_secret_arn}"
+MIGRATION_SECRET_ARN="${migration_secret_arn}"
+ROLE_SQL_BASE64="${role_sql_base64}"
+CA_BUNDLE="/etc/pki/ca-trust/source/anchors/aws-rds-global-bundle.pem"
+
+IMDS_TOKEN=$(curl -fsS -X PUT \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" \
+  http://169.254.169.254/latest/api/token)
+INSTANCE_ID=$(curl -fsS \
+  -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+
+mark_status() {
+  aws ec2 create-tags \
+    --region "$REGION" \
+    --resources "$INSTANCE_ID" \
+    --tags "Key=DatabaseBootstrap,Value=$1" >/dev/null
+}
+
+cleanup() {
+  exit_code=$?
+  rm -f /dev/shm/traverse-roles.sql /dev/shm/runtime-secret.json /dev/shm/migration-secret.json /dev/shm/non-ssl-error.log
+  unset PGPASSWORD MASTER_PASSWORD RUNTIME_PASSWORD MIGRATION_PASSWORD MASTER_SECRET_JSON
+
+  if [ "$exit_code" -eq 0 ]; then
+    mark_status Succeeded || true
+  else
+    mark_status Failed || true
+  fi
+
+  shutdown -h now || true
+  exit "$exit_code"
+}
+
+trap cleanup EXIT
+
+dnf install -y jq postgresql15
+curl -fsS \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+  -o "$CA_BUNDLE"
+update-ca-trust
+
+MASTER_SECRET_JSON=$(aws secretsmanager get-secret-value \
+  --region "$REGION" \
+  --secret-id "$MASTER_SECRET_ARN" \
+  --query SecretString \
+  --output text)
+MASTER_USERNAME=$(jq -er '.username' <<<"$MASTER_SECRET_JSON")
+MASTER_PASSWORD=$(jq -er '.password' <<<"$MASTER_SECRET_JSON")
+
+printf '%s' "$ROLE_SQL_BASE64" | base64 --decode > /dev/shm/traverse-roles.sql
+
+export PGPASSWORD="$MASTER_PASSWORD"
+psql \
+  "host=$DATABASE_HOST port=$DATABASE_PORT dbname=$DATABASE_NAME user=$MASTER_USERNAME sslmode=verify-full sslrootcert=$CA_BUNDLE" \
+  --set=ON_ERROR_STOP=1 \
+  --file=/dev/shm/traverse-roles.sql
+
+RUNTIME_PASSWORD=$(aws secretsmanager get-random-password \
+  --region "$REGION" \
+  --password-length 48 \
+  --exclude-punctuation \
+  --query RandomPassword \
+  --output text)
+MIGRATION_PASSWORD=$(aws secretsmanager get-random-password \
+  --region "$REGION" \
+  --password-length 48 \
+  --exclude-punctuation \
+  --query RandomPassword \
+  --output text)
+
+psql \
+  "host=$DATABASE_HOST port=$DATABASE_PORT dbname=$DATABASE_NAME user=$MASTER_USERNAME sslmode=verify-full sslrootcert=$CA_BUNDLE" \
+  --set=ON_ERROR_STOP=1 \
+  --set=runtime_password="$RUNTIME_PASSWORD" \
+  --set=migration_password="$MIGRATION_PASSWORD" <<'SQL'
+ALTER ROLE traverse_runtime LOGIN PASSWORD :'runtime_password';
+ALTER ROLE traverse_ddl LOGIN PASSWORD :'migration_password';
+SQL
+
+jq -n \
+  --arg host "$DATABASE_HOST" \
+  --argjson port "$DATABASE_PORT" \
+  --arg database "$DATABASE_NAME" \
+  --arg username "traverse_runtime" \
+  --arg password "$RUNTIME_PASSWORD" \
+  '{host:$host,port:$port,database:$database,username:$username,password:$password,sslmode:"verify-full"}' \
+  > /dev/shm/runtime-secret.json
+
+jq -n \
+  --arg host "$DATABASE_HOST" \
+  --argjson port "$DATABASE_PORT" \
+  --arg database "$DATABASE_NAME" \
+  --arg username "traverse_ddl" \
+  --arg password "$MIGRATION_PASSWORD" \
+  '{host:$host,port:$port,database:$database,username:$username,password:$password,sslmode:"verify-full"}' \
+  > /dev/shm/migration-secret.json
+
+aws secretsmanager put-secret-value \
+  --region "$REGION" \
+  --secret-id "$RUNTIME_SECRET_ARN" \
+  --secret-string file:///dev/shm/runtime-secret.json >/dev/null
+aws secretsmanager put-secret-value \
+  --region "$REGION" \
+  --secret-id "$MIGRATION_SECRET_ARN" \
+  --secret-string file:///dev/shm/migration-secret.json >/dev/null
+
+if psql \
+  "host=$DATABASE_HOST port=$DATABASE_PORT dbname=$DATABASE_NAME user=$MASTER_USERNAME sslmode=disable" \
+  --set=ON_ERROR_STOP=1 \
+  --command="SELECT 1" >/dev/null 2>/dev/shm/non-ssl-error.log; then
+  echo "Non-TLS PostgreSQL connection unexpectedly succeeded" >&2
+  exit 1
+fi
+
+if ! grep -q "no encryption" /dev/shm/non-ssl-error.log; then
+  echo "Non-TLS PostgreSQL connection failed for an unexpected reason" >&2
+  cat /dev/shm/non-ssl-error.log >&2
+  exit 1
+fi
+rm -f /dev/shm/non-ssl-error.log
+
+psql \
+  "host=$DATABASE_HOST port=$DATABASE_PORT dbname=$DATABASE_NAME user=$MASTER_USERNAME sslmode=verify-full sslrootcert=$CA_BUNDLE" \
+  --set=ON_ERROR_STOP=1 \
+  --command="SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles WHERE rolname IN ('traverse_ddl', 'traverse_runtime') ORDER BY rolname"
+
+export PGPASSWORD="$RUNTIME_PASSWORD"
+psql \
+  "host=$DATABASE_HOST port=$DATABASE_PORT dbname=$DATABASE_NAME user=traverse_runtime sslmode=verify-full sslrootcert=$CA_BUNDLE" \
+  --set=ON_ERROR_STOP=1 \
+  --command="SELECT current_user, app.current_tenant_id() IS NULL AS tenant_context_fails_closed"
