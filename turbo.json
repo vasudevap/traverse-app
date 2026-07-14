@@ -4,6 +4,10 @@
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": {},
-    "test": { "dependsOn": ["^build"], "outputs": [] }
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["G4_DATABASE_URL"],
+      "outputs": []
+    }
   }
 }
