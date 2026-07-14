@@ -14,18 +14,25 @@ $roles$;
 
 ALTER ROLE traverse_ddl
   NOLOGIN
+  NOSUPERUSER
   NOCREATEDB
   NOCREATEROLE
-  NOINHERIT;
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
 
 ALTER ROLE traverse_runtime
   NOLOGIN
+  NOSUPERUSER
   NOCREATEDB
   NOCREATEROLE
-  NOINHERIT;
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
 
 REVOKE traverse_ddl FROM traverse_runtime;
 REVOKE traverse_runtime FROM traverse_ddl;
+CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 DO $database_grants$
@@ -92,16 +99,42 @@ AS $function$
   SELECT NULLIF(current_setting('app.coach_id', true), '')::uuid
 $function$;
 
+CREATE OR REPLACE FUNCTION app.current_client_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+PARALLEL SAFE
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $function$
+  SELECT NULLIF(current_setting('app.client_id', true), '')::uuid
+$function$;
+
+CREATE OR REPLACE FUNCTION app.current_practice_role()
+RETURNS text
+LANGUAGE sql
+STABLE
+PARALLEL SAFE
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $function$
+  SELECT NULLIF(current_setting('app.practice_role', true), '')
+$function$;
+
 REVOKE ALL ON FUNCTION app.current_tenant_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.current_actor_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.current_actor_role() FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.current_coach_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.current_client_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.current_practice_role() FROM PUBLIC;
 
 GRANT USAGE ON SCHEMA app TO traverse_runtime;
 GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO traverse_runtime;
 GRANT EXECUTE ON FUNCTION app.current_actor_id() TO traverse_runtime;
 GRANT EXECUTE ON FUNCTION app.current_actor_role() TO traverse_runtime;
 GRANT EXECUTE ON FUNCTION app.current_coach_id() TO traverse_runtime;
+GRANT EXECUTE ON FUNCTION app.current_client_id() TO traverse_runtime;
+GRANT EXECUTE ON FUNCTION app.current_practice_role() TO traverse_runtime;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO traverse_runtime;
