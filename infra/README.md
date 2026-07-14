@@ -144,6 +144,10 @@ The deployment workflow registers an immutable digest-based revision, runs the m
 task to completion, then scales each service to one task. ECS deployment circuit breakers
 roll back unhealthy replacements; every service also has an in-container `/health` check.
 
+GitHub-hosted runners are AMD64. The deployment workflow sets up QEMU emulation and a
+Buildx builder before publishing the `linux/arm64` images required by the Fargate task
+definitions. This setup is a deployment prerequisite, not an optional optimization.
+
 `main` automatically deploys to NonProd. Production is workflow-dispatch only and uses
 the GitHub `production` environment. The current repository plan does not support a
 required-reviewer environment rule, so the manual workflow dispatch is the active
