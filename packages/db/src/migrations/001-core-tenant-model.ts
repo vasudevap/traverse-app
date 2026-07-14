@@ -367,6 +367,7 @@ async function up(database: Kysely<unknown>): Promise<void> {
       ON app.users, app.sessions, app.auth_tokens, app.tenants, app.clients
       TO traverse_runtime;
     GRANT SELECT, INSERT, DELETE ON app.coaches TO traverse_runtime;
+    REVOKE UPDATE ON app.coaches FROM traverse_runtime;
     GRANT UPDATE (display_name, bio, discipline, status, updated_at)
       ON app.coaches
       TO traverse_runtime;
