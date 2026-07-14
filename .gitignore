@@ -6,3 +6,8 @@ dist/
 !.env.example
 *.log
 .DS_Store
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/.state/
