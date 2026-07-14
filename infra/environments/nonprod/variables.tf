@@ -13,3 +13,8 @@ variable "database_bootstrap_host_enabled" {
   type        = bool
   default     = false
 }
+
+variable "storage_asset_cors_allowed_origins" {
+  description = "Browser origins allowed to manage private brand assets."
+  type        = list(string)
+}

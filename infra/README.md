@@ -95,3 +95,41 @@ creation, installs fail-closed request-context helpers, and grants no runtime
 against PostgreSQL and rejects tenant tables missing `tenant_id NOT NULL`, forced
 RLS, a policy, or a tenant-leading index, as well as unsafe runtime ownership or
 role grants.
+
+## TRA-19 private storage and video delivery
+
+The `storage` module creates separate private video and asset buckets with
+SSE-KMS, bucket keys, public-access blocks, bucket-owner-enforced ownership, TLS-only
+bucket policies, explicit KMS-only upload enforcement, browser CORS, and incomplete multipart cleanup. Video objects tagged
+`auto-delete-eligible=true` expire after 45 days as the V6 retention safety net.
+Application deletion remains authoritative for plan-specific retention.
+
+Video CORS intentionally allows any origin because Established practices can serve
+the client app from custom domains (D22). CORS is not the authorization boundary:
+uploads still require short-lived credentials scoped to one object key, content type,
+and size, while playback still requires an exact-key CloudFront signature. Asset CORS
+remains limited to the known coach-app origins.
+
+Private video playback uses CloudFront Price Class 100, Origin Access Control, and a
+trusted key group. Every viewer request requires a signed URL. Terraform manages the
+public key only. The corresponding private key must never be committed or passed as a
+Terraform input because that would place it in state.
+
+The Stage 1 distribution initially uses its generated `cloudfront.net` hostname and
+default certificate. CloudFront reports the default certificate with a `TLSv1`
+minimum even though modern clients negotiate TLS 1.2 or TLS 1.3. TRA-21 owns the
+product-domain alias and ACM certificate that will enforce `TLSv1.2_2021` before
+user traffic is enabled.
+
+Generate a distinct RSA key pair for each environment, commit only the public half as
+`infra/environments/<environment>/cloudfront-public-key.pem`, and store a JSON secret
+containing `cloudfrontPrivateKey`, `cloudfrontPublicKeyId`,
+`cloudfrontKeyGroupId`, `cloudfrontDistributionId`,
+`cloudfrontDistributionDomain`, and `signedUrlTtlSeconds` in
+`traverse/<environment>/video`. ECS secret injection for those fields is owned by
+TRA-20. Rotate by adding a second trusted public key, deploying signers with the new
+private key, and removing the old key only after existing two-hour URLs have expired.
+
+The API, worker, and video worker receive role-scoped S3 permissions. CloudFront can
+read only the video bucket through its exact distribution ARN. The shared KMS policy
+admits CloudFront decrypt requests only from distributions in the same AWS account.

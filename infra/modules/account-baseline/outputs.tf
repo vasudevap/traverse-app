@@ -17,3 +17,8 @@ output "task_role_arns" {
   description = "ECS task role ARNs keyed by service name."
   value       = { for name, role in aws_iam_role.task : name => role.arn }
 }
+
+output "task_role_names" {
+  description = "ECS task role names keyed by service name."
+  value       = { for name, role in aws_iam_role.task : name => role.name }
+}
