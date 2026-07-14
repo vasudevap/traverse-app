@@ -238,6 +238,16 @@ resource "aws_security_group" "video_worker" {
   }
 }
 
+resource "aws_security_group" "migration" {
+  name        = "${local.name_prefix}-migration"
+  description = "One-off DDL migration tasks in the private app tier"
+  vpc_id      = aws_vpc.this.id
+
+  tags = {
+    Name = "${local.name_prefix}-migration-sg"
+  }
+}
+
 resource "aws_vpc_security_group_ingress_rule" "alb_https_cloudflare" {
   for_each = local.cloudflare_ipv4_cidrs
 
@@ -272,6 +282,7 @@ resource "aws_vpc_security_group_egress_rule" "app" {
     api          = aws_security_group.api.id
     worker       = aws_security_group.worker.id
     video-worker = aws_security_group.video_worker.id
+    migration    = aws_security_group.migration.id
   }
 
   security_group_id = each.value

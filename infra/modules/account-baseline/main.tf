@@ -15,9 +15,10 @@ locals {
   }
 
   task_role_secret_access = {
-    api          = ["auth", "database", "resend", "stripe"]
+    api          = ["auth", "database", "resend", "stripe", "video"]
     worker       = ["assemblyai", "auth", "database", "resend", "stripe"]
     video-worker = ["assemblyai", "database", "video"]
+    migration    = ["database-migration"]
   }
 
   direct_kms_roles = toset(["api", "worker", "video-worker"])

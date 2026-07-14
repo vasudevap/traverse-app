@@ -96,6 +96,23 @@ module "storage" {
   multipart_abort_days          = 7
 }
 
+module "compute" {
+  source = "../../modules/compute"
+
+  project                = "traverse"
+  environment            = "prod"
+  region                 = "us-east-1"
+  infrastructure_profile = var.infrastructure_profile
+  app_subnet_ids         = module.network.app_subnet_ids
+  app_security_group_ids = module.network.app_security_group_ids
+  task_role_arns         = module.account_baseline.task_role_arns
+  secret_arns            = module.account_baseline.secret_arns
+  kms_key_arn            = module.account_baseline.kms_key_arn
+  github_repository      = "vasudevap/traverse-app"
+  github_oidc_subject    = "repo:vasudevap/traverse-app:environment:production"
+  log_retention_days     = 90
+}
+
 output "baseline" {
   description = "Prod baseline resource identifiers."
   value = {
@@ -132,4 +149,9 @@ output "database" {
 output "storage" {
   description = "Prod storage and private video delivery foundation."
   value       = module.storage.summary
+}
+
+output "compute" {
+  description = "Prod ECS and CD foundation."
+  value       = module.compute.summary
 }

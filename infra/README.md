@@ -133,3 +133,30 @@ private key, and removing the old key only after existing two-hour URLs have exp
 The API, worker, and video worker receive role-scoped S3 permissions. CloudFront can
 read only the video bucket through its exact distribution ARN. The shared KMS policy
 admits CloudFront decrypt requests only from distributions in the same AWS account.
+
+## TRA-20 ECS services and deployment pipeline
+
+The `compute` module provides a private ARM64 Fargate cluster, immutable KMS-encrypted
+ECR repositories, encrypted service logs, one ECS service each for API, generic worker,
+and video worker, plus an on-demand DDL-only migration task. Every service starts with
+zero tasks so Terraform can create ECR and ECS safely before the first image exists.
+The deployment workflow registers an immutable digest-based revision, runs the migration
+task to completion, then scales each service to one task. ECS deployment circuit breakers
+roll back unhealthy replacements; every service also has an in-container `/health` check.
+
+`main` automatically deploys to NonProd. Production is workflow-dispatch only and uses
+the GitHub `production` environment. The current repository plan does not support a
+required-reviewer environment rule, so the manual workflow dispatch is the active
+production control. Enable a required-reviewer protection rule before any payment or
+user-facing production rollout if the repository plan gains support. The
+environment-specific GitHub OIDC roles accept only the exact `main` branch subject in
+NonProd and the exact `production` environment subject in Prod. They can push only
+Traverse ECR images, register/run ECS tasks, update the three services, and pass only
+the named ECS roles.
+
+Before first deployment, apply the Compute module in each account so the ECR repositories,
+zero-count services, task definitions, and GitHub deployment roles exist. Ensure the
+database role bootstrap has populated both database secrets. Then use the deploy workflow
+to publish the first immutable images and promote the services after the migration task
+succeeds. TRA-21 owns the external HTTPS listener and product-domain ingress; these tasks
+remain private until that work is complete.
