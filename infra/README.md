@@ -27,9 +27,12 @@ aws sso login --profile traverse-prod
 
 ## State
 
-TRA-16 uses local bootstrap state under `infra/.state/`, which is ignored by Git.
-TRA-17 owns the remote S3 state backend and lock configuration. Migrate these state
-files into the TRA-17 backends before making later infrastructure changes.
+Each AWS account has its own versioned, KMS-encrypted S3 state bucket and native S3
+lockfile. Production state never resides in or grants access to the NonProd account.
+The state buckets are created by the environment roots under `infra/bootstrap/`.
+
+Do not use Terraform's deprecated DynamoDB locking for new environments. The S3
+backends set `use_lockfile = true` and retain bucket versions for state recovery.
 
 ## Apply
 
@@ -45,5 +48,5 @@ terraform -chdir=infra/environments/prod plan -out=prod.tfplan
 terraform -chdir=infra/environments/prod apply prod.tfplan
 ```
 
-The AWS provider has an allowed-account guard, so an environment cannot be applied
-to the other Traverse account accidentally.
+The AWS provider and backend both have allowed-account guards, so an environment
+cannot be applied to the other Traverse account accidentally.
