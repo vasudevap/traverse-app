@@ -155,65 +155,98 @@ if (databaseUrl === undefined || databaseUrl === '') {
     const reappliedMigration = await migrateToLatest(database);
     assert.equal(reappliedMigration.at(-1)?.status, 'Success');
 
-    await pool.query(
-      `
+    const seedClient = await pool.connect();
+    try {
+      await seedClient.query('BEGIN');
+      await seedClient.query(
+        `
         INSERT INTO app.users (id, email, name) VALUES
           ($1, 'owner-a@example.test', 'Owner A'),
           ($2, 'coach-a@example.test', 'Coach A'),
           ($3, 'coach-b@example.test', 'Coach B'),
           ($4, 'client-a@example.test', 'Client A'),
           ($5, 'client-a2@example.test', 'Client A2'),
-          ($6, 'client-b@example.test', 'Client B');
-
+          ($6, 'client-b@example.test', 'Client B')
+      `,
+        [ownerUserA, coachUserA, coachUserB, clientUserA, clientUserA2, clientUserB],
+      );
+      await seedClient.query(
+        `
         INSERT INTO app.tenants (id, name, subdomain) VALUES
-          ($7, 'Tenant A', 'tenant-a'),
-          ($8, 'Tenant B', 'tenant-b');
-
+          ($1, 'Tenant A', 'tenant-a'),
+          ($2, 'Tenant B', 'tenant-b')
+      `,
+        [tenantA, tenantB],
+      );
+      await seedClient.query(
+        `
         INSERT INTO app.tenant_keys
           (tenant_id, wrapped_data_key, kms_key_id, key_version)
         VALUES
-          ($7, decode('a1', 'hex'), 'alias/traverse-test', 1),
-          ($8, decode('b1', 'hex'), 'alias/traverse-test', 1);
-
+          ($1, decode('a1', 'hex'), 'alias/traverse-test', 1),
+          ($2, decode('b1', 'hex'), 'alias/traverse-test', 1)
+      `,
+        [tenantA, tenantB],
+      );
+      await seedClient.query(
+        `
         INSERT INTO app.coaches
           (id, tenant_id, user_id, role_in_practice, display_name)
         VALUES
-          ($9, $7, $1, 'owner', 'Owner A'),
-          ($10, $7, $2, 'coach', 'Coach A'),
-          ($11, $8, $3, 'coach', 'Coach B');
-
+          ($1, $2, $3, 'owner', 'Owner A'),
+          ($4, $2, $5, 'coach', 'Coach A'),
+          ($6, $7, $8, 'coach', 'Coach B')
+      `,
+        [
+          ownerCoachA,
+          tenantA,
+          ownerUserA,
+          regularCoachA,
+          coachUserA,
+          regularCoachB,
+          tenantB,
+          coachUserB,
+        ],
+      );
+      await seedClient.query(
+        `
         INSERT INTO app.clients (id, user_id, name) VALUES
-          ($12, $4, 'Client A'),
-          ($13, $5, 'Client A2'),
-          ($14, $6, 'Client B');
-
+          ($1, $2, 'Client A'),
+          ($3, $4, 'Client A2'),
+          ($5, $6, 'Client B')
+      `,
+        [clientA, clientUserA, clientA2, clientUserA2, clientB, clientUserB],
+      );
+      await seedClient.query(
+        `
         INSERT INTO app.coaching_relationships
           (id, tenant_id, coach_id, client_id, status, onboarding_state)
         VALUES
-          ($15, $7, $9, $12, 'active', 'complete'),
-          ($16, $7, $10, $13, 'active', 'complete'),
-          ($17, $8, $11, $14, 'active', 'complete');
+          ($1, $2, $3, $4, 'active', 'complete'),
+          ($5, $2, $6, $7, 'active', 'complete'),
+          ($8, $9, $10, $11, 'active', 'complete')
       `,
-      [
-        ownerUserA,
-        coachUserA,
-        coachUserB,
-        clientUserA,
-        clientUserA2,
-        clientUserB,
-        tenantA,
-        tenantB,
-        ownerCoachA,
-        regularCoachA,
-        regularCoachB,
-        clientA,
-        clientA2,
-        clientB,
-        relationshipAOwner,
-        relationshipACoach,
-        relationshipB,
-      ],
-    );
+        [
+          relationshipAOwner,
+          tenantA,
+          ownerCoachA,
+          clientA,
+          relationshipACoach,
+          regularCoachA,
+          clientA2,
+          relationshipB,
+          tenantB,
+          regularCoachB,
+          clientB,
+        ],
+      );
+      await seedClient.query('COMMIT');
+    } catch (error) {
+      await seedClient.query('ROLLBACK');
+      throw error;
+    } finally {
+      seedClient.release();
+    }
   });
 
   after(async () => {
