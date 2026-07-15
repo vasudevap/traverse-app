@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -55,6 +54,5 @@ jobs:
       - name: Run verification gate
         run: pnpm verify
 
-      - name: Review dependency changes
-        if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
+      - name: Audit dependencies
+        run: pnpm audit:dependencies
