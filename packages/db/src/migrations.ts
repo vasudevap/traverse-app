@@ -7,13 +7,18 @@ import {
   type MigrationResultSet,
 } from 'kysely/migration';
 import { coreTenantModelMigration } from './migrations/001-core-tenant-model.js';
+import { pgBossAccessMigration } from './migrations/002-pgboss-access.js';
 
 export const MIGRATION_NAME = '20260714_001_core_tenant_model';
+export const PGBOSS_ACCESS_MIGRATION_NAME = '20260715_002_pgboss_access';
 export const CORE_TENANT_TABLES = ['tenant_keys', 'coaches', 'coaching_relationships'] as const;
 
 const provider: MigrationProvider = {
   async getMigrations() {
-    return { [MIGRATION_NAME]: coreTenantModelMigration };
+    return {
+      [MIGRATION_NAME]: coreTenantModelMigration,
+      [PGBOSS_ACCESS_MIGRATION_NAME]: pgBossAccessMigration,
+    };
   },
 };
 

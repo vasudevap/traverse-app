@@ -20,6 +20,7 @@ export {
 export {
   CORE_TENANT_TABLES,
   MIGRATION_NAME,
+  PGBOSS_ACCESS_MIGRATION_NAME,
   migrateToEmpty,
   migrateToLatest,
 } from './migrations.js';

@@ -10,7 +10,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@traverse/db": "workspace:*"
+    "@traverse/db": "workspace:*",
+    "@traverse/jobs": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
