@@ -1,7 +1,15 @@
 /** Shared database, migration, RLS, and field-encryption foundations. */
 export const DB_PACKAGE = '@traverse/db';
 
+export {
+  DatabaseAuthSessionStore,
+  type AuthenticatedSession,
+  type AuthSessionStore,
+  type AuthSubject,
+  type RotateSessionInput,
+} from './auth-sessions.js';
 export { createDatabase, type DatabaseConfig, type TraverseDatabaseClient } from './database.js';
+export { databaseConnectionString } from './database-secret.js';
 export {
   decryptField,
   decryptString,
@@ -19,6 +27,7 @@ export {
 } from './kms-key-provider.js';
 export {
   CORE_TENANT_TABLES,
+  AUTH_SESSION_MIGRATION_NAME,
   MIGRATION_NAME,
   PGBOSS_ACCESS_MIGRATION_NAME,
   migrateToEmpty,

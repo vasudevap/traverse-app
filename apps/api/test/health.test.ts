@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
-import { createApp } from '../src/create-app';
+import { createApp } from '../src/create-app.js';
+import { TestAuthSessionStore } from './test-auth-store.js';
 
 test('GET /health returns the API liveness response', async () => {
-  const app = await createApp({ logger: false });
+  const app = await createApp(
+    { logger: false },
+    { allowedOrigins: new Set(), authSessionStore: new TestAuthSessionStore() },
+  );
 
   try {
     await app.listen(0, '127.0.0.1');
