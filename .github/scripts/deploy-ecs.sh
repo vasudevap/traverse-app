@@ -70,12 +70,25 @@ aws ecs wait tasks-stopped \
   --cluster "$ECS_CLUSTER" \
   --tasks "$migration_task_arn"
 
-aws ecs describe-tasks \
+migration_task=$(aws ecs describe-tasks \
   --region "$AWS_REGION" \
   --cluster "$ECS_CLUSTER" \
   --tasks "$migration_task_arn" \
   --output json \
-  | jq --exit-status '.tasks[0].containers[] | select(.name == "migration") | .exitCode == 0' >/dev/null
+)
+
+if ! jq --exit-status '.tasks[0].containers[] | select(.name == "migration") | .exitCode == 0' \
+  <<<"$migration_task" >/dev/null; then
+  echo "Migration task failed: $migration_task_arn" >&2
+  jq -c '.tasks[0] | {
+    taskArn,
+    lastStatus,
+    stopCode,
+    stoppedReason,
+    containers: [.containers[] | {name, lastStatus, exitCode, reason}]
+  }' <<<"$migration_task" >&2
+  exit 1
+fi
 
 for service in api worker video-worker; do
   image="${ECR_REGISTRY}/traverse-${DEPLOYMENT_ENVIRONMENT}-${service}@${IMAGE_DIGEST}"
