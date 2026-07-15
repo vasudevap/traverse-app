@@ -66,6 +66,9 @@ The `production-baseline` profile is `db.m7g.large` Multi-AZ.
 Runtime images include AWS's RDS global CA bundle and set `NODE_EXTRA_CA_CERTS` so
 the API and migration runner validate the RDS certificate chain while retaining
 `rejectUnauthorized: true`. Do not replace this control with disabled TLS validation.
+The core migration also provisions PostgreSQL's trusted `citext` extension
+idempotently, so an empty environment does not depend on the temporary bootstrap
+host for that schema prerequisite.
 
 RDS manages the master password in Secrets Manager. Neither Terraform output nor
 application roles can read its value. Initialize the DDL and runtime roles by

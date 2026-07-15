@@ -9,6 +9,8 @@ async function up(database: Kysely<unknown>): Promise<void> {
 
   await sql`SET LOCAL ROLE traverse_ddl`.execute(database);
 
+  await sql`CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public`.execute(database);
+
   await sql`
     CREATE OR REPLACE FUNCTION app.current_client_id()
     RETURNS uuid
