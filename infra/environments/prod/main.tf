@@ -44,12 +44,15 @@ provider "aws" {
 module "network" {
   source = "../../modules/network"
 
-  project                 = "traverse"
-  environment             = "prod"
-  infrastructure_profile  = var.infrastructure_profile
-  region                  = "us-east-1"
-  vpc_cidr                = var.vpc_cidr
-  flow_log_retention_days = 90
+  project                   = "traverse"
+  environment               = "prod"
+  infrastructure_profile    = var.infrastructure_profile
+  region                    = "us-east-1"
+  vpc_cidr                  = var.vpc_cidr
+  flow_log_retention_days   = 90
+  api_domain_name           = var.api_domain_name
+  provision_api_certificate = var.provision_api_certificate
+  enable_api_ingress        = var.enable_api_ingress
 }
 
 module "account_baseline" {
@@ -111,6 +114,7 @@ module "compute" {
   github_repository      = "vasudevap/traverse-app"
   github_oidc_subject    = "repo:vasudevap/traverse-app:environment:production"
   log_retention_days     = 90
+  api_target_group_arn   = module.network.api_target_group_arn
 }
 
 output "baseline" {
@@ -126,18 +130,20 @@ output "baseline" {
 output "network" {
   description = "Prod network baseline."
   value = {
-    vpc_id                 = module.network.vpc_id
-    availability_zones     = module.network.availability_zones
-    public_subnet_ids      = module.network.public_subnet_ids
-    app_subnet_ids         = module.network.app_subnet_ids
-    data_subnet_ids        = module.network.data_subnet_ids
-    route_table_ids        = module.network.route_table_ids
-    nat_gateway_id         = module.network.nat_gateway_id
-    s3_gateway_endpoint_id = module.network.s3_gateway_endpoint_id
-    alb                    = module.network.alb
-    app_security_group_ids = module.network.app_security_group_ids
-    cloudflare_ipv4_cidrs  = module.network.cloudflare_ipv4_cidrs
-    infrastructure_profile = module.network.infrastructure_profile
+    vpc_id                                 = module.network.vpc_id
+    availability_zones                     = module.network.availability_zones
+    public_subnet_ids                      = module.network.public_subnet_ids
+    app_subnet_ids                         = module.network.app_subnet_ids
+    data_subnet_ids                        = module.network.data_subnet_ids
+    route_table_ids                        = module.network.route_table_ids
+    nat_gateway_id                         = module.network.nat_gateway_id
+    s3_gateway_endpoint_id                 = module.network.s3_gateway_endpoint_id
+    alb                                    = module.network.alb
+    api_listener_arn                       = module.network.api_listener_arn
+    api_certificate_dns_validation_records = module.network.api_certificate_dns_validation_records
+    app_security_group_ids                 = module.network.app_security_group_ids
+    cloudflare_ipv4_cidrs                  = module.network.cloudflare_ipv4_cidrs
+    infrastructure_profile                 = module.network.infrastructure_profile
   }
 }
 

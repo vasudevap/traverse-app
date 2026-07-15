@@ -51,6 +51,28 @@ output "alb" {
   }
 }
 
+output "api_target_group_arn" {
+  description = "API target group ARN when protected public ingress is enabled, otherwise null."
+  value       = try(aws_lb_target_group.api[0].arn, null)
+}
+
+output "api_listener_arn" {
+  description = "Protected API HTTPS listener ARN when ingress is enabled, otherwise null."
+  value       = try(aws_lb_listener.api_https[0].arn, null)
+}
+
+output "api_certificate_dns_validation_records" {
+  description = "DNS CNAME records required to validate the API ACM certificate before public ingress is enabled."
+  value = try([
+    for option in aws_acm_certificate.api[0].domain_validation_options : {
+      domain_name  = option.domain_name
+      record_name  = option.resource_record_name
+      record_type  = option.resource_record_type
+      record_value = option.resource_record_value
+    }
+  ], [])
+}
+
 output "app_security_group_ids" {
   description = "Private app security groups for later ECS and RDS wiring."
   value = {

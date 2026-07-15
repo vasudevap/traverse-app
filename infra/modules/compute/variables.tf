@@ -40,6 +40,19 @@ variable "app_security_group_ids" {
   }
 }
 
+variable "api_target_group_arn" {
+  description = "Optional ALB target group ARN used to attach the API service when protected public ingress is enabled."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "api_port" {
+  description = "API container port registered with the ALB target group."
+  type        = number
+  default     = 3000
+}
+
 variable "task_role_arns" {
   description = "Task IAM role ARNs keyed by api, worker, video-worker, and migration."
   type        = map(string)

@@ -48,6 +48,24 @@ variable "api_port" {
   default     = 3000
 }
 
+variable "api_domain_name" {
+  description = "Public API hostname to certificate and route through the Cloudflare-protected ALB."
+  type        = string
+  default     = "api.traversecoaching.com"
+}
+
+variable "provision_api_certificate" {
+  description = "Request the DNS-validated ACM certificate for the API hostname without enabling public ingress."
+  type        = bool
+  default     = false
+}
+
+variable "enable_api_ingress" {
+  description = "Create the HTTPS ALB listener, Cloudflare AOP trust store, and API target group after ACM DNS validation succeeds."
+  type        = bool
+  default     = false
+}
+
 variable "flow_log_retention_days" {
   description = "CloudWatch retention for rejected VPC flow logs."
   type        = number

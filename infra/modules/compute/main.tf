@@ -271,6 +271,16 @@ resource "aws_ecs_service" "service" {
     assign_public_ip = false
   }
 
+  dynamic "load_balancer" {
+    for_each = each.key == "api" && var.api_target_group_arn != null ? [var.api_target_group_arn] : []
+
+    content {
+      target_group_arn = load_balancer.value
+      container_name   = each.key
+      container_port   = var.api_port
+    }
+  }
+
   lifecycle {
     ignore_changes = [desired_count, task_definition]
   }
