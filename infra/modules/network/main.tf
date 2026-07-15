@@ -7,6 +7,8 @@ data "aws_availability_zones" "available" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 data "http" "cloudflare_ipv4" {
   url = "https://www.cloudflare.com/ips-v4"
 
@@ -302,6 +304,141 @@ resource "aws_lb" "api" {
 
   tags = {
     Name = "${local.name_prefix}-alb"
+  }
+}
+
+resource "aws_acm_certificate" "api" {
+  count = var.provision_api_certificate ? 1 : 0
+
+  domain_name       = var.api_domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-api"
+  }
+}
+
+resource "aws_s3_bucket" "cloudflare_aop_trust_store" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  bucket        = "${local.name_prefix}-aop-trust-${data.aws_caller_identity.current.account_id}"
+  force_destroy = false
+}
+
+resource "aws_s3_bucket_public_access_block" "cloudflare_aop_trust_store" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  bucket                  = aws_s3_bucket.cloudflare_aop_trust_store[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "cloudflare_aop_trust_store" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  bucket = aws_s3_bucket.cloudflare_aop_trust_store[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudflare_aop_trust_store" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  bucket = aws_s3_bucket.cloudflare_aop_trust_store[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_object" "cloudflare_aop_ca" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  bucket       = aws_s3_bucket.cloudflare_aop_trust_store[0].id
+  key          = "cloudflare-authenticated-origin-pull-ca.pem"
+  source       = "${path.module}/cloudflare-authenticated-origin-pull-ca.pem"
+  etag         = filemd5("${path.module}/cloudflare-authenticated-origin-pull-ca.pem")
+  content_type = "application/x-pem-file"
+
+  depends_on = [
+    aws_s3_bucket_public_access_block.cloudflare_aop_trust_store,
+    aws_s3_bucket_versioning.cloudflare_aop_trust_store,
+    aws_s3_bucket_server_side_encryption_configuration.cloudflare_aop_trust_store,
+  ]
+}
+
+resource "aws_lb_trust_store" "cloudflare_aop" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  name                                     = "${local.name_prefix}-cloudflare-aop"
+  ca_certificates_bundle_s3_bucket         = aws_s3_bucket.cloudflare_aop_trust_store[0].id
+  ca_certificates_bundle_s3_key            = aws_s3_object.cloudflare_aop_ca[0].key
+  ca_certificates_bundle_s3_object_version = aws_s3_object.cloudflare_aop_ca[0].version_id
+}
+
+resource "aws_lb_target_group" "api" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  name        = "${local.name_prefix}-api"
+  port        = var.api_port
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.this.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_listener" "api_https" {
+  count = var.enable_api_ingress ? 1 : 0
+
+  load_balancer_arn = aws_lb.api.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = aws_acm_certificate.api[0].arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api[0].arn
+  }
+
+  mutual_authentication {
+    mode                             = "verify"
+    trust_store_arn                  = aws_lb_trust_store.cloudflare_aop[0].arn
+    advertise_trust_store_ca_names   = "off"
+    ignore_client_certificate_expiry = false
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.provision_api_certificate
+      error_message = "Set provision_api_certificate=true and complete DNS validation before enabling API ingress."
+    }
+
+    precondition {
+      condition     = aws_acm_certificate.api[0].status == "ISSUED"
+      error_message = "The api.traversecoaching.com ACM certificate must be ISSUED before the HTTPS listener can be enabled."
+    }
   }
 }
 

@@ -124,9 +124,10 @@ Terraform input because that would place it in state.
 
 The Stage 1 distribution initially uses its generated `cloudfront.net` hostname and
 default certificate. CloudFront reports the default certificate with a `TLSv1`
-minimum even though modern clients negotiate TLS 1.2 or TLS 1.3. TRA-21 owns the
-product-domain alias and ACM certificate that will enforce `TLSv1.2_2021` before
-user traffic is enabled.
+minimum even though modern clients negotiate TLS 1.2 or TLS 1.3. The future static
+frontend deployment owns any application-domain CloudFront alias and its
+`TLSv1.2_2021` certificate. TRA-21 owns the separately protected API ingress at
+`api.traversecoaching.com`.
 
 Generate a distinct RSA key pair for each environment, commit only the public half as
 `infra/environments/<environment>/cloudfront-public-key.pem`, and store a JSON secret
@@ -176,3 +177,65 @@ them with scoped test credentials before enabling the corresponding service flow
 the deploy workflow to publish the first immutable images and promote the services after
 the migration task succeeds. TRA-21 owns the external HTTPS listener and product-domain
 ingress; these tasks remain private until that work is complete.
+
+## TRA-21 Cloudflare-protected API ingress
+
+The API ingress controls are deliberately disabled in both environment `terraform.tfvars`
+files. A normal plan therefore leaves the existing private services unchanged. The network
+module refreshes Cloudflare's published IPv4 list on every Terraform plan or apply and
+allows ALB port 443 traffic only from those ranges. The VPC has no IPv6 address space, so
+there is no IPv6 ALB ingress rule to maintain.
+
+When an authorised launch owner is ready to perform the controlled activation, use this
+sequence for one environment at a time:
+
+1. Request the ACM certificate only. This does not create a public listener or change DNS
+   delegation:
+
+   ```sh
+   terraform -chdir=infra/environments/nonprod plan \
+     -var=provision_api_certificate=true \
+     -out=nonprod-api-certificate.tfplan
+   terraform -chdir=infra/environments/nonprod apply nonprod-api-certificate.tfplan
+   terraform -chdir=infra/environments/nonprod output -json network
+   ```
+
+2. Add only the returned ACM DNS-validation CNAME in the current authoritative DNS
+   provider. Do not change nameservers, MX, or unrelated TXT records. Wait for ACM to show
+   `ISSUED`.
+
+3. In Cloudflare, prepare the zone without changing delegation, configure SSL/TLS mode
+   **Full (strict)**, and enable **Authenticated Origin Pulls** using Cloudflare's global
+   certificate. The Terraform trust store uses the matching public CA bundle from
+   Cloudflare's official Authenticated Origin Pulls documentation. Review its expiry and
+   replace the checked-in bundle before it expires. A per-hostname AOP certificate is a
+   stricter future option, but it requires a deliberately provisioned Cloudflare API
+   credential and must not be committed to this repository.
+
+4. Enable the listener only after ACM validation. The listener has Terraform preconditions
+   for both the certificate request and `ISSUED` status:
+
+   ```sh
+   terraform -chdir=infra/environments/nonprod plan \
+     -var=provision_api_certificate=true \
+     -var=enable_api_ingress=true \
+     -out=nonprod-api-ingress.tfplan
+   terraform -chdir=infra/environments/nonprod apply nonprod-api-ingress.tfplan
+   ```
+
+   This creates an HTTPS-only ALB listener using `ELBSecurityPolicy-TLS13-1-2-2021-06`,
+   an IP target group for the API ECS service, and ALB mutual TLS verification against the
+   Cloudflare AOP CA bundle. A direct request to the ALB must fail without a Cloudflare
+   client certificate.
+
+5. At the approved product-launch DNS cutover, copy every existing GoDaddy record into
+   Cloudflare, leaving Microsoft 365 MX and TXT records intact. Add an orange-clouded
+   `api` record pointing to the ALB DNS name, then update GoDaddy nameservers. Validate
+   `https://api.traversecoaching.com/health` through Cloudflare, confirm direct ALB access
+   remains rejected, and monitor ALB, ECS, and Cloudflare error metrics before enabling
+   user traffic.
+
+Do not use a Terraform apply as a substitute for an approved DNS cutover. This repository
+does not manage the Cloudflare zone or GoDaddy nameservers. If validation fails after the
+listener is enabled, leave the existing DNS delegation unchanged, disable the Cloudflare
+proxy record, and investigate before changing the Terraform ingress flag.
