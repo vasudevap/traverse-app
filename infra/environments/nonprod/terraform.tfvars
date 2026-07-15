@@ -1,6 +1,6 @@
 infrastructure_profile    = "closed-beta"
 vpc_cidr                  = "10.10.0.0/16"
-api_domain_name           = "api.traversecoaching.com"
+api_domain_name           = "staging-api.traversecoaching.com"
 provision_api_certificate = false
 enable_api_ingress        = false
 storage_asset_cors_allowed_origins = [
