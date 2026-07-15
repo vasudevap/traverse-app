@@ -167,7 +167,12 @@ the named ECS roles.
 
 Before first deployment, apply the Compute module in each account so the ECR repositories,
 zero-count services, task definitions, and GitHub deployment roles exist. Ensure the
-database role bootstrap has populated both database secrets. Then use the deploy workflow
-to publish the first immutable images and promote the services after the migration task
-succeeds. TRA-21 owns the external HTTPS listener and product-domain ingress; these tasks
-remain private until that work is complete.
+database role bootstrap has populated both database secrets. Every secret referenced by a
+task definition must also have an `AWSCURRENT` version before the first rollout: generate
+an authentication secret, provision the video secret, and provision the integration
+credentials when their flows are enabled. In NonProd only, explicit placeholders are
+acceptable for Resend, Stripe, or AssemblyAI while those integrations are disabled; replace
+them with scoped test credentials before enabling the corresponding service flow. Then use
+the deploy workflow to publish the first immutable images and promote the services after
+the migration task succeeds. TRA-21 owns the external HTTPS listener and product-domain
+ingress; these tasks remain private until that work is complete.
