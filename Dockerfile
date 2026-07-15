@@ -19,7 +19,6 @@ RUN apt-get update \
     && useradd --system --gid traverse --home-dir /app --shell /usr/sbin/nologin traverse
 
 COPY --from=build /app /app
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 USER traverse
 
