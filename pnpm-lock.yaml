@@ -283,7 +283,20 @@ importers:
         version: 5.9.3
 
   packages/ui:
+    dependencies:
+      '@fontsource/fraunces':
+        specifier: ^5.2.9
+        version: 5.2.9
+      '@fontsource/hanken-grotesk':
+        specifier: ^5.2.8
+        version: 5.2.8
     devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
@@ -1079,6 +1092,18 @@ packages:
         integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==,
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
+
+  '@fontsource/fraunces@5.2.9':
+    resolution:
+      {
+        integrity: sha512-XDzuddBtoC7BZgZdBn6b7hsFZY2+V1hgN7yca5fBTKuHjb/lOd45a0Ji8dTUgFhPoL7RdGupo+bC2BFSt6UH8Q==,
+      }
+
+  '@fontsource/hanken-grotesk@5.2.8':
+    resolution:
+      {
+        integrity: sha512-J/e6hdfNCbyc4WK5hmZtk0zjaIsFx3pvCdPVxY25iYw2C9v1ZggGz4nfHnRjMhcz4WfaadUuwLNtvj8sQ70tkg==,
+      }
 
   '@humanfs/core@0.19.2':
     resolution:
@@ -3800,6 +3825,10 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@fontsource/fraunces@5.2.9': {}
+
+  '@fontsource/hanken-grotesk@5.2.8': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

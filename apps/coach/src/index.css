@@ -1,12 +1,13 @@
-html,
-body,
-#root {
-  min-height: 100%;
-  margin: 0;
+@import '@traverse/ui/src/styles.css';
+
+.coach-dashboard {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@media (max-width: 900px) {
+  .coach-dashboard {
+    grid-template-columns: 1fr;
+  }
 }
