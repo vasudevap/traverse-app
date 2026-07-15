@@ -20,9 +20,9 @@ variable "storage_asset_cors_allowed_origins" {
 }
 
 variable "api_domain_name" {
-  description = "Public API hostname reserved for the Cloudflare-protected ALB."
+  description = "NonProd API hostname, isolated from the production Cloudflare-protected ALB."
   type        = string
-  default     = "api.traversecoaching.com"
+  default     = "staging-api.traversecoaching.com"
 }
 
 variable "provision_api_certificate" {

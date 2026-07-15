@@ -127,7 +127,8 @@ default certificate. CloudFront reports the default certificate with a `TLSv1`
 minimum even though modern clients negotiate TLS 1.2 or TLS 1.3. The future static
 frontend deployment owns any application-domain CloudFront alias and its
 `TLSv1.2_2021` certificate. TRA-21 owns the separately protected API ingress at
-`api.traversecoaching.com`.
+`api.traversecoaching.com` in production and `staging-api.traversecoaching.com` in
+NonProd.
 
 Generate a distinct RSA key pair for each environment, commit only the public half as
 `infra/environments/<environment>/cloudfront-public-key.pem`, and store a JSON secret
@@ -186,6 +187,13 @@ module refreshes Cloudflare's published IPv4 list on every Terraform plan or app
 allows ALB port 443 traffic only from those ranges. The VPC has no IPv6 address space, so
 there is no IPv6 ALB ingress rule to maintain.
 
+Production exclusively owns `api.traversecoaching.com`. NonProd uses
+`staging-api.traversecoaching.com`; the same `staging-*` versus production boundary
+applies to the product SPAs. Do not publish a NonProd ACM validation CNAME for the
+production hostname. If an earlier certificate request used that hostname, replace it
+through Terraform with the configured NonProd hostname before publishing any validation
+record.
+
 When an authorised launch owner is ready to perform the controlled activation, use this
 sequence for one environment at a time:
 
@@ -200,9 +208,9 @@ sequence for one environment at a time:
    terraform -chdir=infra/environments/nonprod output -json network
    ```
 
-2. Add only the returned ACM DNS-validation CNAME in the current authoritative DNS
-   provider. Do not change nameservers, MX, or unrelated TXT records. Wait for ACM to show
-   `ISSUED`.
+2. Add only the returned environment-specific ACM DNS-validation CNAME in the current
+   authoritative DNS provider. Do not change nameservers, MX, or unrelated TXT records.
+   Wait for ACM to show `ISSUED`.
 
 3. In Cloudflare, prepare the zone without changing delegation, configure SSL/TLS mode
    **Full (strict)**, and enable **Authenticated Origin Pulls** using Cloudflare's global
@@ -230,10 +238,10 @@ sequence for one environment at a time:
 
 5. At the approved product-launch DNS cutover, copy every existing GoDaddy record into
    Cloudflare, leaving Microsoft 365 MX and TXT records intact. Add an orange-clouded
-   `api` record pointing to the ALB DNS name, then update GoDaddy nameservers. Validate
-   `https://api.traversecoaching.com/health` through Cloudflare, confirm direct ALB access
-   remains rejected, and monitor ALB, ECS, and Cloudflare error metrics before enabling
-   user traffic.
+   production `api` record pointing to the production ALB DNS name, then update GoDaddy
+   nameservers. Validate `https://api.traversecoaching.com/health` through Cloudflare,
+   confirm direct ALB access remains rejected, and monitor ALB, ECS, and Cloudflare error
+   metrics before enabling user traffic.
 
 Do not use a Terraform apply as a substitute for an approved DNS cutover. This repository
 does not manage the Cloudflare zone or GoDaddy nameservers. If validation fails after the

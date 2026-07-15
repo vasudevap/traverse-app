@@ -49,9 +49,8 @@ variable "api_port" {
 }
 
 variable "api_domain_name" {
-  description = "Public API hostname to certificate and route through the Cloudflare-protected ALB."
+  description = "Environment-specific API hostname to certificate and route through the Cloudflare-protected ALB."
   type        = string
-  default     = "api.traversecoaching.com"
 }
 
 variable "provision_api_certificate" {
