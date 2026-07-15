@@ -11,6 +11,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "verify": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."
   },
