@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { QUEUES } from '@traverse/jobs';
+import { GENERIC_WORKER_QUEUES } from '@traverse/jobs';
 import { startWorkerHealthServer } from '../src/health';
 import { workerQueues } from '../src/main';
 
-test('generic worker imports the shared queue registry', () => {
-  assert.deepEqual(workerQueues, Object.values(QUEUES));
+test('generic worker owns only non-video queues', () => {
+  assert.deepEqual(workerQueues, GENERIC_WORKER_QUEUES);
 });
 
 test('generic worker health server reports liveness', async () => {
