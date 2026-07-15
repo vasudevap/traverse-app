@@ -1,12 +1,1 @@
-html,
-body,
-#root {
-  min-height: 100%;
-  margin: 0;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+@import '@traverse/ui/src/styles.css';

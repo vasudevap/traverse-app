@@ -1,12 +1,8 @@
-html,
-body,
-#root {
-  min-height: 100%;
-  margin: 0;
-}
+@import '@traverse/ui/src/styles.css';
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+.client-dashboard {
+  display: grid;
+  gap: 24px;
+  margin: 0 auto;
+  max-width: 680px;
 }

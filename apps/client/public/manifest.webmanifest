@@ -1,0 +1,17 @@
+{
+  "name": "Your coaching space",
+  "short_name": "Coaching",
+  "description": "A private, coach-branded space for reflections and sessions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFBFC",
+  "theme_color": "#2E8B7A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
