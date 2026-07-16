@@ -337,13 +337,15 @@ does not manage the Cloudflare zone or GoDaddy nameservers. If validation fails 
 listener is enabled, preserve the authoritative marketing and email records, stop test
 traffic, and use a separately reviewed rollback instead of changing unrelated DNS.
 
-## TRA-30 guarded NonProd static app hosting
+## TRA-30 and TRA-34 guarded NonProd static app hosting
 
 The `static-hosting` module defines separate private S3 origins and CloudFront
 distributions for the Admin, Billing Admin, Client, and Coach app shells. It is restricted
-to NonProd and disabled by default through `enable_static_hosting = false`. A normal plan
-therefore creates no static hosting resource and does not change the existing ECS, API
-ingress, certificate, DNS, Cloudflare, or production boundaries.
+to NonProd. TRA-34 enables it durably through `enable_static_hosting = true` in the NonProd
+environment after review of a static-hosting-only plan. Keep the flag true after activation
+so a routine plan cannot silently propose destroying the distributions and origin buckets.
+The activation does not change the existing ECS, API ingress, certificate, DNS, Cloudflare,
+or production boundaries.
 
 When enabled through an explicitly authorized NonProd Terraform plan and apply, each app
 uses only its generated `cloudfront.net` hostname and default CloudFront certificate. The
@@ -352,6 +354,12 @@ Cloudflare configuration. S3 origins block all public access and allow object re
 from their exact CloudFront distribution through Origin Access Control. Bucket versioning
 retains superseded objects for 30 days, and HTTPS responses include the shared browser
 security policy.
+
+AWS fixes the default CloudFront certificate to the `TLSv1` security-policy label. The
+generated endpoints support TLS 1.2 and TLS 1.3, but they also permit TLS 1.0 and TLS 1.1.
+Enforcing a TLS 1.2 minimum requires a custom certificate and application alias, which are
+outside this guarded preview scope. That stricter transport policy is deferred to the
+separately authorized product-domain activation.
 
 Extensionless routes are rewritten to `/index.html` by a CloudFront Function. Fingerprinted
 files under `assets/` use the managed optimized cache policy and one-year immutable origin
@@ -363,6 +371,29 @@ manual. Dispatch `Deploy static apps` from `main` and affirm the NonProd confirm
 The workflow has no production target and the OIDC role accepts only the exact `main` branch
 subject. Its S3 permissions are scoped to the four static origin buckets. The publication
 script also verifies the NonProd account ID before synchronizing any object.
+
+The GitHub deployment role receives its four bucket-scoped publication permissions from
+the Compute module. Review and save both module targets together so the infrastructure and
+publisher permissions cannot drift into separate changes:
+
+```sh
+terraform -chdir=infra/environments/nonprod plan \
+  -target=module.static_hosting \
+  -target=module.compute.aws_iam_role_policy.github_deploy \
+  -out=nonprod-static-hosting.tfplan
+terraform -chdir=infra/environments/nonprod show \
+  nonprod-static-hosting.tfplan
+terraform -chdir=infra/environments/nonprod apply \
+  nonprod-static-hosting.tfplan
+```
+
+The reviewed TRA-34 plan must contain exactly 35 creates, one in-place GitHub deployment
+role policy update, and zero destroys. The creates are four distributions, four private
+buckets and their controls, one shared Origin Access Control, one CloudFront Function, and
+one response headers policy. Stop for a new review if any other resource or action appears.
+After apply, verify the `static_hosting` output contains exactly four generated CloudFront
+endpoints, all buckets still block public access, and all distributions report enabled
+before authorizing publication.
 
 Do not dispatch the workflow before Terraform outputs four populated endpoints. Do not add
 application aliases or migrate DNS as part of this sequence. Product-domain activation is a
