@@ -351,6 +351,7 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecs:DescribeServices",
       "ecs:DescribeTaskDefinition",
       "ecs:DescribeTasks",
+      "ecs:ListTasks",
       "ecs:RegisterTaskDefinition",
       "ecs:RunTask",
       "ecs:UpdateService",
