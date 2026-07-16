@@ -9,6 +9,7 @@ import {
   createTransactionalJobDispatcher,
   databaseConnectionString,
   deadLetterQueueName,
+  jobBossOptions,
   type QueueName,
 } from '../src/index';
 
@@ -47,6 +48,18 @@ test('queue definitions create a dedicated dead-letter queue first', async () =>
     QUEUES.transcription,
   ]);
   assert.deepEqual(VIDEO_WORKER_QUEUES, [QUEUES.videoTranscode]);
+});
+
+test('runtime pg-boss supervision avoids partition DDL while retaining live monitoring', () => {
+  const options = jobBossOptions({
+    connectionString: 'postgresql://runtime@example.test/traverse',
+  });
+
+  assert.equal(options.createSchema, false);
+  assert.equal(options.migrate, false);
+  assert.equal(options.persistQueueStats, false);
+  assert.equal(options.persistWarnings, true);
+  assert.equal(options.supervise, true);
 });
 
 test('dispatcher sends through the supplied Kysely transaction with an optional dedupe key', async () => {
