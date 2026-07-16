@@ -156,6 +156,9 @@ roll back unhealthy replacements; every service also has an in-container `/healt
 GitHub-hosted runners are AMD64. The deployment workflow sets up QEMU emulation and a
 Buildx builder before publishing the `linux/arm64` images required by the Fargate task
 definitions. This setup is a deployment prerequisite, not an optional optimization.
+Every registered revision also upserts `DEPLOYMENT_ENVIRONMENT` from the workflow into
+the cloned task definition. This keeps environment-specific runtime defaults correct even
+when the latest AWS revision predates a Terraform task-template change.
 
 `main` automatically deploys to NonProd. Production is workflow-dispatch only and uses
 the GitHub `production` environment. The current repository plan does not support a

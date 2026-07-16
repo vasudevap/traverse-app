@@ -8,6 +8,7 @@ set -Eeuo pipefail
 : "${IMAGE_DIGEST:?IMAGE_DIGEST is required}"
 
 STABILITY_OBSERVATION_SECONDS="${STABILITY_OBSERVATION_SECONDS:-130}"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 register_deployment_revision() {
   local family="$1"
@@ -23,19 +24,11 @@ register_deployment_revision() {
     --query taskDefinition \
     --output json >"$source_file"
 
-  jq --arg image "$image" '
-    del(
-      .taskDefinitionArn,
-      .revision,
-      .status,
-      .requiresAttributes,
-      .compatibilities,
-      .registeredAt,
-      .registeredBy,
-      .deregisteredAt
-    )
-    | .containerDefinitions[0].image = $image
-  ' "$source_file" >"$registered_file"
+  jq \
+    --arg image "$image" \
+    --arg deployment_environment "$DEPLOYMENT_ENVIRONMENT" \
+    -f "$SCRIPT_DIR/ecs-deployment-revision.jq" \
+    "$source_file" >"$registered_file"
 
   task_definition_arn=$(aws ecs register-task-definition \
     --region "$AWS_REGION" \
