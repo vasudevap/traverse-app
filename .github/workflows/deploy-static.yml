@@ -1,0 +1,56 @@
+name: Deploy static apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_nonprod:
+        description: Confirm publication to the four provider-generated NonProd endpoints
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-static-nonprod
+  cancel-in-progress: false
+
+jobs:
+  deploy-nonprod-static:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_nonprod
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: nonprod-static
+    env:
+      AWS_REGION: us-east-1
+      DEPLOYMENT_ENVIRONMENT: nonprod
+      ROLE_TO_ASSUME: arn:aws:iam::124074140404:role/traverse-nonprod-github-deploy
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build app shells
+        run: pnpm build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+
+      - name: Publish static apps
+        run: bash .github/scripts/deploy-static.sh

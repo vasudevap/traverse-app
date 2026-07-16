@@ -92,6 +92,12 @@ variable "github_oidc_subject" {
   type        = string
 }
 
+variable "static_site_bucket_arns" {
+  description = "Private NonProd static origin bucket ARNs the GitHub deployment role may publish to."
+  type        = map(string)
+  default     = {}
+}
+
 variable "log_retention_days" {
   description = "CloudWatch retention for ECS service logs."
   type        = number

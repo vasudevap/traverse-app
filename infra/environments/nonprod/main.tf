@@ -99,22 +99,31 @@ module "storage" {
   multipart_abort_days          = 7
 }
 
+module "static_hosting" {
+  source = "../../modules/static-hosting"
+
+  project     = "traverse"
+  environment = "nonprod"
+  enabled     = var.enable_static_hosting
+}
+
 module "compute" {
   source = "../../modules/compute"
 
-  project                = "traverse"
-  environment            = "nonprod"
-  region                 = "us-east-1"
-  infrastructure_profile = var.infrastructure_profile
-  app_subnet_ids         = module.network.app_subnet_ids
-  app_security_group_ids = module.network.app_security_group_ids
-  task_role_arns         = module.account_baseline.task_role_arns
-  secret_arns            = module.account_baseline.secret_arns
-  kms_key_arn            = module.account_baseline.kms_key_arn
-  github_repository      = "vasudevap/traverse-app"
-  github_oidc_subject    = "repo:vasudevap/traverse-app:ref:refs/heads/main"
-  log_retention_days     = 30
-  api_target_group_arn   = module.network.api_target_group_arn
+  project                 = "traverse"
+  environment             = "nonprod"
+  region                  = "us-east-1"
+  infrastructure_profile  = var.infrastructure_profile
+  app_subnet_ids          = module.network.app_subnet_ids
+  app_security_group_ids  = module.network.app_security_group_ids
+  task_role_arns          = module.account_baseline.task_role_arns
+  secret_arns             = module.account_baseline.secret_arns
+  kms_key_arn             = module.account_baseline.kms_key_arn
+  github_repository       = "vasudevap/traverse-app"
+  github_oidc_subject     = "repo:vasudevap/traverse-app:ref:refs/heads/main"
+  log_retention_days      = 30
+  api_target_group_arn    = module.network.api_target_group_arn
+  static_site_bucket_arns = module.static_hosting.bucket_arns
 }
 
 output "baseline" {
@@ -160,4 +169,9 @@ output "storage" {
 output "compute" {
   description = "NonProd ECS and CD foundation."
   value       = module.compute.summary
+}
+
+output "static_hosting" {
+  description = "Guarded NonProd static app endpoints. Empty until enable_static_hosting is authorized."
+  value       = module.static_hosting.sites
 }

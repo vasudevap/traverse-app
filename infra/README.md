@@ -247,3 +247,35 @@ Do not use a Terraform apply as a substitute for an approved DNS cutover. This r
 does not manage the Cloudflare zone or GoDaddy nameservers. If validation fails after the
 listener is enabled, leave the existing DNS delegation unchanged, disable the Cloudflare
 proxy record, and investigate before changing the Terraform ingress flag.
+
+## TRA-30 guarded NonProd static app hosting
+
+The `static-hosting` module defines separate private S3 origins and CloudFront
+distributions for the Admin, Billing Admin, Client, and Coach app shells. It is restricted
+to NonProd and disabled by default through `enable_static_hosting = false`. A normal plan
+therefore creates no static hosting resource and does not change the existing ECS, API
+ingress, certificate, DNS, Cloudflare, or production boundaries.
+
+When enabled through an explicitly authorized NonProd Terraform plan and apply, each app
+uses only its generated `cloudfront.net` hostname and default CloudFront certificate. The
+module creates no aliases, custom certificates, Route 53 records, GoDaddy records, or
+Cloudflare configuration. S3 origins block all public access and allow object reads only
+from their exact CloudFront distribution through Origin Access Control. Bucket versioning
+retains superseded objects for 30 days, and HTTPS responses include the shared browser
+security policy.
+
+Extensionless routes are rewritten to `/index.html` by a CloudFront Function. Fingerprinted
+files under `assets/` use the managed optimized cache policy and one-year immutable origin
+metadata. App routes and entry-point files use the managed disabled cache policy, so static
+publication does not need broad CloudFront invalidation permissions.
+
+After the guarded infrastructure is separately reviewed and applied, publication remains
+manual. Dispatch `Deploy static apps` from `main` and affirm the NonProd confirmation input.
+The workflow has no production target and the OIDC role accepts only the exact `main` branch
+subject. Its S3 permissions are scoped to the four static origin buckets. The publication
+script also verifies the NonProd account ID before synchronizing any object.
+
+Do not dispatch the workflow before Terraform outputs four populated endpoints. Do not add
+application aliases or migrate DNS as part of this sequence. Product-domain activation is a
+separate launch operation and remains blocked by its owning certificate, DNS, and ingress
+controls.
