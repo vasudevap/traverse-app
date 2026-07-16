@@ -184,11 +184,12 @@ ingress; these tasks remain private until that work is complete.
 
 ## TRA-21 Cloudflare-protected API ingress
 
-The API ingress controls are deliberately disabled in both environment `terraform.tfvars`
-files. A normal plan therefore leaves the existing private services unchanged. The network
-module refreshes Cloudflare's published IPv4 list on every Terraform plan or apply and
-allows ALB port 443 traffic only from those ranges. The VPC has no IPv6 address space, so
-there is no IPv6 ALB ingress rule to maintain.
+NonProd keeps API ingress enabled through its durable `terraform.tfvars` setting after
+completion of the certificate, Cloudflare, DNS, DNSSEC, email, and activation-plan gates.
+Production remains deliberately disabled. The network module refreshes Cloudflare's
+published IPv4 list on every Terraform plan or apply and allows ALB port 443 traffic only
+from those ranges. The VPC has no IPv6 address space, so there is no IPv6 ALB ingress rule
+to maintain.
 
 NonProd keeps `provision_api_certificate = true` because its validated certificate is now
 a durable managed resource. Production keeps the flag false until its own certificate
@@ -222,40 +223,110 @@ sequence for one environment at a time:
    authoritative DNS provider. Do not change nameservers, MX, or unrelated TXT records.
    Wait for ACM to show `ISSUED`.
 
-3. In Cloudflare, prepare the zone without changing delegation, configure SSL/TLS mode
-   **Full (strict)**, and enable **Authenticated Origin Pulls** using Cloudflare's global
-   certificate. The Terraform trust store uses the matching public CA bundle from
-   Cloudflare's official Authenticated Origin Pulls documentation. Review its expiry and
-   replace the checked-in bundle before it expires. A per-hostname AOP certificate is a
-   stricter future option, but it requires a deliberately provisioned Cloudflare API
-   credential and must not be committed to this repository.
+3. Migrate authoritative DNS to Cloudflare only after copying and reviewing every existing
+   registrar record. Preserve the marketing apex, `www`, Microsoft 365 MX/TXT/SRV records,
+   mail aliases, ACM validation CNAMEs, and unrelated records exactly. Validate the copied
+   set through at least two independent public resolvers after changing delegation.
 
-4. Enable the listener only after ACM validation. The listener has Terraform preconditions
-   for both the certificate request and `ISSUED` status:
+4. Require Cloudflare to report the zone active with SSL/TLS mode **Full (strict)** and
+   **Authenticated Origin Pulls** enabled through Cloudflare's global certificate. Enable
+   DNSSEC at Cloudflare and publish the exact DS through the registrar. Verify the marketing
+   site, protected `/admin` route, ACM validation CNAME, and an actual mailbox send-and-
+   receive transaction before listener activation.
+
+   The NonProd gate completed on 2026-07-16. Cloudflare is authoritative through
+   `ara.ns.cloudflare.com` and `jobs.ns.cloudflare.com`; all 46 copied-record checks passed
+   through both `1.1.1.1` and `8.8.8.8`; Full (strict), Global Authenticated Origin Pulls,
+   and DNSSEC are active; the marketing and admin checks passed; and Microsoft 365 email
+   was validated in both directions. The Terraform trust store uses the matching public CA
+   bundle from Cloudflare's official Authenticated Origin Pulls documentation. Review its
+   expiry and replace the checked-in bundle before it expires. A per-hostname AOP
+   certificate is a stricter future option, but it requires a deliberately provisioned
+   Cloudflare API credential and must not be committed to this repository.
+
+5. Enable the listener only after ACM validation, active Cloudflare delegation, and
+   verified Authenticated Origin Pulls. Set `enable_api_ingress = true` in the reviewed
+   environment file and keep it true after activation so later plans cannot silently
+   propose destroying the listener and origin trust resources. Do not rely on a
+   command-line variable as the durable source of desired state. The listener has Terraform
+   preconditions for both the certificate request and `ISSUED` status.
+
+   A broad NonProd plan can include bootstrap task-definition replacements because GitHub
+   Actions owns the deployed immutable ECS revisions. Do not apply those unrelated changes.
+   Review and save a network-only exceptional target plan:
 
    ```sh
    terraform -chdir=infra/environments/nonprod plan \
-     -var=enable_api_ingress=true \
-     -out=nonprod-api-ingress.tfplan
-   terraform -chdir=infra/environments/nonprod apply nonprod-api-ingress.tfplan
+     -target=module.network \
+     -out=nonprod-api-ingress-network.tfplan
+   terraform -chdir=infra/environments/nonprod show \
+     nonprod-api-ingress-network.tfplan
+   terraform -chdir=infra/environments/nonprod apply \
+     nonprod-api-ingress-network.tfplan
    ```
 
-   This creates an HTTPS-only ALB listener using `ELBSecurityPolicy-TLS13-1-2-2021-06`,
-   an IP target group for the API ECS service, and ALB mutual TLS verification against the
-   Cloudflare AOP CA bundle. A direct request to the ALB must fail without a Cloudflare
-   client certificate.
+   The reviewed NonProd plan creates exactly eight network resources with no changes or
+   destroys. It creates an HTTPS-only ALB listener using
+   `ELBSecurityPolicy-TLS13-1-2-2021-06`, an IP target group, and ALB mutual TLS
+   verification against the Cloudflare AOP CA bundle. A direct request to the ALB must
+   fail without a Cloudflare client certificate.
 
-5. At the approved product-launch DNS cutover, copy every existing GoDaddy record into
-   Cloudflare, leaving Microsoft 365 MX and TXT records intact. Add an orange-clouded
-   production `api` record pointing to the production ALB DNS name, then update GoDaddy
-   nameservers. Validate `https://api.traversecoaching.com/health` through Cloudflare,
-   confirm direct ALB access remains rejected, and monitor ALB, ECS, and Cloudflare error
-   metrics before enabling user traffic.
+6. Attach the existing API ECS service to the new target group without changing its current
+   immutable task definition. This API call starts a rolling ECS deployment, so capture the
+   current task-definition ARN before the update and confirm it is unchanged afterward:
+
+   ```sh
+   aws ecs describe-services \
+     --cluster traverse-nonprod-cluster \
+     --services traverse-nonprod-api \
+     --profile traverse-nonprod \
+     --region us-east-1 \
+     --query 'services[0].taskDefinition' \
+     --output text
+
+   API_TARGET_GROUP_ARN="$(aws elbv2 describe-target-groups \
+     --names traverse-nonprod-api \
+     --profile traverse-nonprod \
+     --region us-east-1 \
+     --query 'TargetGroups[0].TargetGroupArn' \
+     --output text)"
+
+   aws ecs update-service \
+     --cluster traverse-nonprod-cluster \
+     --service traverse-nonprod-api \
+     --load-balancers \
+       "targetGroupArn=${API_TARGET_GROUP_ARN},containerName=api,containerPort=3000" \
+     --profile traverse-nonprod \
+     --region us-east-1
+
+   aws ecs wait services-stable \
+     --cluster traverse-nonprod-cluster \
+     --services traverse-nonprod-api \
+     --profile traverse-nonprod \
+     --region us-east-1
+   ```
+
+   Verify target health and the unchanged task-definition ARN. Then reconcile the
+   out-of-band attachment into Terraform state with a reviewed refresh-only plan:
+
+   ```sh
+   terraform -chdir=infra/environments/nonprod plan \
+     -refresh-only \
+     -target='module.compute.aws_ecs_service.service["api"]' \
+     -out=nonprod-api-service-refresh.tfplan
+   terraform -chdir=infra/environments/nonprod apply \
+     nonprod-api-service-refresh.tfplan
+   ```
+
+   Validate `https://staging-api.traversecoaching.com/health` through Cloudflare, confirm
+   direct ALB access remains rejected, and monitor ALB, ECS, and Cloudflare error metrics
+   before enabling test traffic. Production `api` ingress remains a separate, explicitly
+   authorized change.
 
 Do not use a Terraform apply as a substitute for an approved DNS cutover. This repository
 does not manage the Cloudflare zone or GoDaddy nameservers. If validation fails after the
-listener is enabled, leave the existing DNS delegation unchanged, disable the Cloudflare
-proxy record, and investigate before changing the Terraform ingress flag.
+listener is enabled, preserve the authoritative marketing and email records, stop test
+traffic, and use a separately reviewed rollback instead of changing unrelated DNS.
 
 ## TRA-30 guarded NonProd static app hosting
 
