@@ -315,6 +315,7 @@ resource "aws_acm_certificate" "api" {
 
   lifecycle {
     create_before_destroy = true
+    prevent_destroy       = true
   }
 
   tags = {

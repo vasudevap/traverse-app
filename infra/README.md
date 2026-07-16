@@ -187,6 +187,12 @@ module refreshes Cloudflare's published IPv4 list on every Terraform plan or app
 allows ALB port 443 traffic only from those ranges. The VPC has no IPv6 address space, so
 there is no IPv6 ALB ingress rule to maintain.
 
+NonProd keeps `provision_api_certificate = true` because its validated certificate is now
+a durable managed resource. Production keeps the flag false until its own certificate
+request is explicitly authorized. After a certificate is created, keep its environment
+flag true. The resource also uses `prevent_destroy`, so intentional certificate removal
+requires a separately reviewed lifecycle change instead of an environment flag toggle.
+
 Production exclusively owns `api.traversecoaching.com`. NonProd uses
 `staging-api.traversecoaching.com`; the same `staging-*` versus production boundary
 applies to the product SPAs. Do not publish a NonProd ACM validation CNAME for the
@@ -197,12 +203,13 @@ record.
 When an authorised launch owner is ready to perform the controlled activation, use this
 sequence for one environment at a time:
 
-1. Request the ACM certificate only. This does not create a public listener or change DNS
-   delegation:
+1. Request the ACM certificate only. Set `provision_api_certificate = true` in the
+   environment's reviewed `terraform.tfvars` change and keep it true after creation. This
+   does not create a public listener or change DNS delegation. NonProd already has this
+   durable setting after successful validation:
 
    ```sh
    terraform -chdir=infra/environments/nonprod plan \
-     -var=provision_api_certificate=true \
      -out=nonprod-api-certificate.tfplan
    terraform -chdir=infra/environments/nonprod apply nonprod-api-certificate.tfplan
    terraform -chdir=infra/environments/nonprod output -json network
@@ -225,7 +232,6 @@ sequence for one environment at a time:
 
    ```sh
    terraform -chdir=infra/environments/nonprod plan \
-     -var=provision_api_certificate=true \
      -var=enable_api_ingress=true \
      -out=nonprod-api-ingress.tfplan
    terraform -chdir=infra/environments/nonprod apply nonprod-api-ingress.tfplan
