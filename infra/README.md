@@ -184,11 +184,12 @@ ingress; these tasks remain private until that work is complete.
 
 ## TRA-21 Cloudflare-protected API ingress
 
-The API ingress controls remain deliberately disabled in both environment
-`terraform.tfvars` files until the relevant Cloudflare zone is active and Authenticated
-Origin Pulls is enabled. The network module refreshes Cloudflare's published IPv4 list on
-every Terraform plan or apply and allows ALB port 443 traffic only from those ranges. The
-VPC has no IPv6 address space, so there is no IPv6 ALB ingress rule to maintain.
+NonProd keeps API ingress enabled through its durable `terraform.tfvars` setting after
+completion of the certificate, Cloudflare, DNS, DNSSEC, email, and activation-plan gates.
+Production remains deliberately disabled. The network module refreshes Cloudflare's
+published IPv4 list on every Terraform plan or apply and allows ALB port 443 traffic only
+from those ranges. The VPC has no IPv6 address space, so there is no IPv6 ALB ingress rule
+to maintain.
 
 NonProd keeps `provision_api_certificate = true` because its validated certificate is now
 a durable managed resource. Production keeps the flag false until its own certificate
@@ -222,25 +223,26 @@ sequence for one environment at a time:
    authoritative DNS provider. Do not change nameservers, MX, or unrelated TXT records.
    Wait for ACM to show `ISSUED`.
 
-3. In Cloudflare, prepare the zone without changing delegation and choose manual DNS entry
-   so no live records are imported or altered. Add only an orange-clouded `staging-api`
-   CNAME pointing to the NonProd ALB DNS name and configure SSL/TLS mode
-   **Full (strict)**. Keep GoDaddy authoritative. Cloudflare disables Authenticated Origin
-   Pulls while a zone is pending nameserver activation, so a pending shadow zone is a hard
-   stop for listener activation.
+3. Migrate authoritative DNS to Cloudflare only after copying and reviewing every existing
+   registrar record. Preserve the marketing apex, `www`, Microsoft 365 MX/TXT/SRV records,
+   mail aliases, ACM validation CNAMEs, and unrelated records exactly. Validate the copied
+   set through at least two independent public resolvers after changing delegation.
 
-4. At the separately approved product-launch DNS cutover, copy every existing GoDaddy
-   record into Cloudflare before changing delegation. Preserve the marketing apex, `www`,
-   Microsoft 365 MX, and all unrelated TXT records exactly. Update GoDaddy nameservers only
-   after that review, wait for Cloudflare to report the zone active, and verify the existing
-   marketing and email records before continuing.
+4. Require Cloudflare to report the zone active with SSL/TLS mode **Full (strict)** and
+   **Authenticated Origin Pulls** enabled through Cloudflare's global certificate. Enable
+   DNSSEC at Cloudflare and publish the exact DS through the registrar. Verify the marketing
+   site, protected `/admin` route, ACM validation CNAME, and an actual mailbox send-and-
+   receive transaction before listener activation.
 
-   Once the zone is active, enable **Authenticated Origin Pulls** using Cloudflare's global
-   certificate. The Terraform trust store uses the matching public CA bundle from
-   Cloudflare's official Authenticated Origin Pulls documentation. Review its expiry and
-   replace the checked-in bundle before it expires. A per-hostname AOP certificate is a
-   stricter future option, but it requires a deliberately provisioned Cloudflare API
-   credential and must not be committed to this repository.
+   The NonProd gate completed on 2026-07-16. Cloudflare is authoritative through
+   `ara.ns.cloudflare.com` and `jobs.ns.cloudflare.com`; all 46 copied-record checks passed
+   through both `1.1.1.1` and `8.8.8.8`; Full (strict), Global Authenticated Origin Pulls,
+   and DNSSEC are active; the marketing and admin checks passed; and Microsoft 365 email
+   was validated in both directions. The Terraform trust store uses the matching public CA
+   bundle from Cloudflare's official Authenticated Origin Pulls documentation. Review its
+   expiry and replace the checked-in bundle before it expires. A per-hostname AOP
+   certificate is a stricter future option, but it requires a deliberately provisioned
+   Cloudflare API credential and must not be committed to this repository.
 
 5. Enable the listener only after ACM validation, active Cloudflare delegation, and
    verified Authenticated Origin Pulls. Set `enable_api_ingress = true` in the reviewed
