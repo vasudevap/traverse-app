@@ -47,6 +47,17 @@ export interface AuthTokenTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface AuthSubjectTable {
+  user_id: string;
+  role: ActorRole;
+  tenant_id: string | null;
+  coach_id: string | null;
+  client_id: string | null;
+  practice_role: PracticeRole | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface TenantTable extends AuditColumns {
   id: Generated<string>;
   name: string;
@@ -96,6 +107,7 @@ export interface CoachingRelationshipTable extends AuditColumns {
 }
 
 export interface Database {
+  auth_subjects: AuthSubjectTable;
   auth_tokens: AuthTokenTable;
   clients: ClientTable;
   coaches: CoachTable;

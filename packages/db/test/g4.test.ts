@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool, type PoolClient } from 'pg';
 import {
   assertRlsContract,
+  DatabaseAuthSessionStore,
   auditRlsContract,
   CORE_TENANT_TABLES,
   migrateToEmpty,
@@ -170,6 +172,10 @@ if (databaseUrl === undefined || databaseUrl === '') {
       `,
         [ownerUserA, coachUserA, coachUserB, clientUserA, clientUserA2, clientUserB],
       );
+      await seedClient.query('UPDATE app.users SET password_hash = $1 WHERE id = $2', [
+        'database-backed-test-hash',
+        ownerUserA,
+      ]);
       await seedClient.query(
         `
         INSERT INTO app.tenants (id, name, subdomain) VALUES
@@ -269,10 +275,68 @@ if (databaseUrl === undefined || databaseUrl === '') {
 
   test('G4 accepts the core tenant tables and read-only tenant key contract', async () => {
     await assertRlsContract(auditClient, {
-      readOnlyTables: ['tenant_keys'],
+      readOnlyTables: ['auth_subjects', 'tenant_keys'],
       schema: 'app',
       tenantTables: [...CORE_TENANT_TABLES],
     });
+  });
+
+  test('TRA-29 persists hashed sessions, resolves coach context, and revokes immediately', async () => {
+    const store = new DatabaseAuthSessionStore(database);
+    const subject = await store.findSubject('owner-a@example.test', 'coach');
+    assert.deepEqual(subject, {
+      clientId: null,
+      coachId: ownerCoachA,
+      email: 'owner-a@example.test',
+      name: 'Owner A',
+      passwordHash: 'database-backed-test-hash',
+      practiceRole: 'owner',
+      role: 'coach',
+      status: 'active',
+      tenantId: tenantA,
+      userId: ownerUserA,
+    });
+
+    const tokenHash = createHash('sha256').update('raw-session-token').digest();
+    const now = new Date('2026-07-15T12:00:00.000Z');
+    await store.rotateSession({
+      expiresAt: new Date('2026-08-14T12:00:00.000Z'),
+      ip: '127.0.0.1',
+      role: 'coach',
+      tokenHash,
+      userAgent: 'node-test',
+      userId: ownerUserA,
+    });
+
+    const authenticated = await store.validateSession(
+      tokenHash,
+      'coach',
+      7 * 24 * 60 * 60 * 1000,
+      now,
+    );
+    assert.equal(authenticated?.tenantId, tenantA);
+    assert.equal(authenticated?.coachId, ownerCoachA);
+
+    const visibleTenants = await withRuntimeContext(
+      {
+        actorId: authenticated?.userId,
+        coachId: authenticated?.coachId ?? undefined,
+        practiceRole: authenticated?.practiceRole ?? undefined,
+        role: authenticated?.role,
+        tenantId: authenticated?.tenantId ?? undefined,
+      },
+      async (client) => {
+        const result = await client.query<{ id: string }>('SELECT id FROM app.tenants');
+        return result.rows;
+      },
+    );
+    assert.deepEqual(visibleTenants, [{ id: tenantA }]);
+
+    assert.equal(await store.revokeSession(tokenHash, 'coach', new Date()), true);
+    assert.equal(
+      await store.validateSession(tokenHash, 'coach', 7 * 24 * 60 * 60 * 1000, new Date()),
+      undefined,
+    );
   });
 
   test('tenant context helper validates claims and scopes settings to one transaction', async () => {

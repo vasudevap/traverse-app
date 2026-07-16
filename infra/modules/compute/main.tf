@@ -186,6 +186,7 @@ resource "aws_ecs_task_definition" "service" {
     command   = each.value.command
     environment = [
       { name = "NODE_ENV", value = "production" },
+      { name = "DEPLOYMENT_ENVIRONMENT", value = var.environment },
       { name = "${upper(replace(each.key, "-", "_"))}_HEALTH_PORT", value = tostring(each.value.health_port) },
     ]
     secrets = [for secret in each.value.secrets : {
