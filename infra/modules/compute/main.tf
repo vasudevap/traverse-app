@@ -317,7 +317,7 @@ data "aws_iam_policy_document" "github_deploy_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [var.github_oidc_subject]
+      values   = var.github_oidc_subjects
     }
   }
 }

@@ -112,7 +112,7 @@ module "compute" {
   secret_arns            = module.account_baseline.secret_arns
   kms_key_arn            = module.account_baseline.kms_key_arn
   github_repository      = "vasudevap/traverse-app"
-  github_oidc_subject    = "repo:vasudevap/traverse-app:environment:production"
+  github_oidc_subjects   = ["repo:vasudevap/traverse-app:environment:production"]
   log_retention_days     = 90
   api_target_group_arn   = module.network.api_target_group_arn
 }

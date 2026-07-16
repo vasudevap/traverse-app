@@ -165,10 +165,12 @@ the GitHub `production` environment. The current repository plan does not suppor
 required-reviewer environment rule, so the manual workflow dispatch is the active
 production control. Enable a required-reviewer protection rule before any payment or
 user-facing production rollout if the repository plan gains support. The
-environment-specific GitHub OIDC roles accept only the exact `main` branch subject in
-NonProd and the exact `production` environment subject in Prod. They can push only
-Traverse ECR images, register/run ECS tasks, update the three services, and pass only
-the named ECS roles.
+environment-specific GitHub OIDC roles accept only configured exact subjects. NonProd
+accepts the exact `main` branch subject for the ECS deployment workflow and the exact
+`nonprod-static` environment subject for the guarded static-publication workflow. Prod
+accepts only the exact `production` environment subject. They can push only Traverse ECR
+images, register/run ECS tasks, update the three services, and pass only the named ECS
+roles.
 
 Before first deployment, apply the Compute module in each account so the ECR repositories,
 zero-count services, task definitions, and GitHub deployment roles exist. Ensure the
@@ -368,9 +370,11 @@ publication does not need broad CloudFront invalidation permissions.
 
 After the guarded infrastructure is separately reviewed and applied, publication remains
 manual. Dispatch `Deploy static apps` from `main` and affirm the NonProd confirmation input.
-The workflow has no production target and the OIDC role accepts only the exact `main` branch
-subject. Its S3 permissions are scoped to the four static origin buckets. The publication
-script also verifies the NonProd account ID before synchronizing any object.
+The workflow has no production target and assumes the NonProd role only through the exact
+`nonprod-static` environment subject. The existing ECS deployment workflow continues to use
+the exact `main` branch subject. Its S3 permissions are scoped to the four static origin
+buckets. The publication script also verifies the NonProd account ID before synchronizing
+any object.
 
 The GitHub deployment role receives its four bucket-scoped publication permissions from
 the Compute module. Review and save both module targets together so the infrastructure and
