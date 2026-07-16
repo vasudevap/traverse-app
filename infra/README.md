@@ -271,9 +271,11 @@ sequence for one environment at a time:
    verification against the Cloudflare AOP CA bundle. A direct request to the ALB must
    fail without a Cloudflare client certificate.
 
-6. Attach the existing API ECS service to the new target group without changing its current
-   immutable task definition. This API call starts a rolling ECS deployment, so capture the
-   current task-definition ARN before the update and confirm it is unchanged afterward:
+6. Confirm the current immutable API task definition declares container port 3000, then
+   attach the existing API ECS service to the new target group without changing that task
+   definition. ECS rejects a load-balancer attachment when the container port is absent.
+   Capture the current task-definition ARN and port mapping before the update, and confirm
+   the ARN is unchanged afterward:
 
    ```sh
    aws ecs describe-services \
@@ -283,6 +285,13 @@ sequence for one environment at a time:
      --region us-east-1 \
      --query 'services[0].taskDefinition' \
      --output text
+
+   aws ecs describe-task-definition \
+     --task-definition traverse-nonprod-api \
+     --profile traverse-nonprod \
+     --region us-east-1 \
+     --query 'taskDefinition.containerDefinitions[?name==`api`].portMappings' \
+     --output json
 
    API_TARGET_GROUP_ARN="$(aws elbv2 describe-target-groups \
      --names traverse-nonprod-api \

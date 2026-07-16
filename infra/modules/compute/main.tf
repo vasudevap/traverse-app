@@ -189,6 +189,11 @@ resource "aws_ecs_task_definition" "service" {
       { name = "DEPLOYMENT_ENVIRONMENT", value = var.environment },
       { name = "${upper(replace(each.key, "-", "_"))}_HEALTH_PORT", value = tostring(each.value.health_port) },
     ]
+    portMappings = each.key == "api" ? [{
+      containerPort = var.api_port
+      hostPort      = var.api_port
+      protocol      = "tcp"
+    }] : []
     secrets = [for secret in each.value.secrets : {
       name      = secret.name
       valueFrom = secret.value_from
