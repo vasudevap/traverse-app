@@ -54,7 +54,7 @@ variable "api_domain_name" {
 }
 
 variable "provision_api_certificate" {
-  description = "Request the DNS-validated ACM certificate for the API hostname without enabling public ingress."
+  description = "Manage the DNS-validated ACM certificate for the API hostname without enabling public ingress. Keep true after creation."
   type        = bool
   default     = false
 }
