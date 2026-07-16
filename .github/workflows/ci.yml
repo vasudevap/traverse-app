@@ -57,6 +57,9 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit:dependencies
 
+      - name: Test ECS deployment revision transformation
+        run: bash .github/scripts/test-ecs-deployment-revision.sh
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 

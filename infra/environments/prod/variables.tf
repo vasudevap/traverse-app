@@ -26,7 +26,7 @@ variable "api_domain_name" {
 }
 
 variable "provision_api_certificate" {
-  description = "Request the ACM certificate only. Keep false until the DNS validation record can be added safely."
+  description = "Manage the ACM certificate only. Keep false until validation can proceed safely, then keep true after creation."
   type        = bool
   default     = false
 }
