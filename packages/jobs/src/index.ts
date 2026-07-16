@@ -1,4 +1,10 @@
-import { PgBoss, fromKysely, type KyselyTransactionLike, type Queue } from 'pg-boss';
+import {
+  PgBoss,
+  fromKysely,
+  type ConstructorOptions,
+  type KyselyTransactionLike,
+  type Queue,
+} from 'pg-boss';
 
 /** Queue names per Decision D17. */
 export const QUEUES = {
@@ -71,8 +77,25 @@ export interface JobBossConfig {
   connectionString: string;
   createSchema?: boolean;
   migrate?: boolean;
+  persistQueueStats?: boolean;
   ssl?: unknown;
   supervise?: boolean;
+}
+
+export function jobBossOptions(config: JobBossConfig): ConstructorOptions {
+  return {
+    connectionString: config.connectionString,
+    createSchema: config.createSchema ?? false,
+    migrate: config.migrate ?? false,
+    // Runtime roles cannot own pg-boss's daily queue_stats partition DDL. Live
+    // getQueueStats() readings remain available when persisted snapshots are disabled.
+    persistQueueStats: config.persistQueueStats ?? false,
+    persistWarnings: true,
+    schema: JOB_SCHEMA,
+    ssl: config.ssl,
+    supervise: config.supervise ?? true,
+    useListenNotify: true,
+  };
 }
 
 /**
@@ -80,17 +103,7 @@ export interface JobBossConfig {
  * createSchema and migrate disabled: only the migration task owns database DDL.
  */
 export function createJobBoss(config: JobBossConfig): PgBoss {
-  return new PgBoss({
-    connectionString: config.connectionString,
-    createSchema: config.createSchema ?? false,
-    migrate: config.migrate ?? false,
-    persistQueueStats: true,
-    persistWarnings: true,
-    schema: JOB_SCHEMA,
-    ssl: config.ssl,
-    supervise: config.supervise ?? true,
-    useListenNotify: true,
-  });
+  return new PgBoss(jobBossOptions(config));
 }
 
 /** Creates the six D17 queues and their isolated dead-letter queues. */

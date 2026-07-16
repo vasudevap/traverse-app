@@ -7,6 +7,8 @@ set -Eeuo pipefail
 : "${ECR_REGISTRY:?ECR_REGISTRY is required}"
 : "${IMAGE_DIGEST:?IMAGE_DIGEST is required}"
 
+STABILITY_OBSERVATION_SECONDS="${STABILITY_OBSERVATION_SECONDS:-130}"
+
 register_deployment_revision() {
   local family="$1"
   local image="$2"
@@ -43,6 +45,29 @@ register_deployment_revision() {
 
   rm -f "$source_file" "$registered_file"
   printf '%s\n' "$task_definition_arn"
+}
+
+running_task_arns() {
+  local service task_arns
+  local running_tasks=()
+
+  for service in "$@"; do
+    task_arns=$(aws ecs list-tasks \
+      --region "$AWS_REGION" \
+      --cluster "$ECS_CLUSTER" \
+      --service-name "$service" \
+      --desired-status RUNNING \
+      --query 'taskArns' \
+      --output text)
+
+    if [[ -z "$task_arns" || "$task_arns" == "None" || "$task_arns" == *$'\t'* ]]; then
+      printf 'Expected exactly one running task for %s, found: %s\n' "$service" "$task_arns" >&2
+      return 1
+    fi
+    running_tasks+=("$task_arns")
+  done
+
+  printf '%s\n' "${running_tasks[*]}"
 }
 
 api_service="traverse-${DEPLOYMENT_ENVIRONMENT}-api"
@@ -90,7 +115,9 @@ if ! jq --exit-status '.tasks[0].containers[] | select(.name == "migration") | .
   exit 1
 fi
 
-for service in api worker video-worker; do
+services=(api worker video-worker)
+
+for service in "${services[@]}"; do
   image="${ECR_REGISTRY}/traverse-${DEPLOYMENT_ENVIRONMENT}-${service}@${IMAGE_DIGEST}"
   task_definition=$(register_deployment_revision "traverse-${DEPLOYMENT_ENVIRONMENT}-${service}" "$image")
 
@@ -107,3 +134,27 @@ for service in api worker video-worker; do
     --cluster "$ECS_CLUSTER" \
     --services "traverse-${DEPLOYMENT_ENVIRONMENT}-${service}"
 done
+
+service_names=()
+for service in "${services[@]}"; do
+  service_names+=("traverse-${DEPLOYMENT_ENVIRONMENT}-${service}")
+done
+
+initial_tasks=$(running_task_arns "${service_names[@]}")
+
+printf 'Observing ECS task stability for %s seconds.\n' "$STABILITY_OBSERVATION_SECONDS"
+sleep "$STABILITY_OBSERVATION_SECONDS"
+
+aws ecs wait services-stable \
+  --region "$AWS_REGION" \
+  --cluster "$ECS_CLUSTER" \
+  --services "${service_names[@]}"
+
+final_tasks=$(running_task_arns "${service_names[@]}")
+
+if [[ "$initial_tasks" != "$final_tasks" ]]; then
+  printf 'ECS tasks changed during the stability observation window.\n' >&2
+  printf 'Initial tasks: %s\n' "$initial_tasks" >&2
+  printf 'Final tasks: %s\n' "$final_tasks" >&2
+  exit 1
+fi
