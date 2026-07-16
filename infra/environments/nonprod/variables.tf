@@ -36,3 +36,9 @@ variable "enable_api_ingress" {
   type        = bool
   default     = false
 }
+
+variable "enable_static_hosting" {
+  description = "Create provider-hosted CloudFront endpoints for the four NonProd app shells."
+  type        = bool
+  default     = false
+}

@@ -330,6 +330,30 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = ["*"]
   }
 
+  dynamic "statement" {
+    for_each = length(var.static_site_bucket_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "ListStaticAppOrigins"
+      actions   = ["s3:GetBucketLocation", "s3:ListBucket"]
+      resources = values(var.static_site_bucket_arns)
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(var.static_site_bucket_arns) > 0 ? [1] : []
+
+    content {
+      sid = "PublishStaticAppAssets"
+      actions = [
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:PutObject",
+      ]
+      resources = [for bucket_arn in values(var.static_site_bucket_arns) : "${bucket_arn}/*"]
+    }
+  }
+
   statement {
     sid = "PublishTraverseImages"
     actions = [

@@ -56,3 +56,21 @@ jobs:
 
       - name: Audit dependencies
         run: pnpm audit:dependencies
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra
+
+      - name: Initialize NonProd Terraform without backend
+        run: terraform -chdir=infra/environments/nonprod init -backend=false
+
+      - name: Validate NonProd Terraform
+        run: terraform -chdir=infra/environments/nonprod validate
+
+      - name: Initialize static hosting module tests
+        run: terraform -chdir=infra/modules/static-hosting init -backend=false
+
+      - name: Test guarded static hosting
+        run: terraform -chdir=infra/modules/static-hosting test
