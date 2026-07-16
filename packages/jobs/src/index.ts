@@ -6,6 +6,16 @@ import {
   type Queue,
 } from 'pg-boss';
 
+export {
+  createResendEmailSender,
+  EmailJobValidationError,
+  parseEmailDeliveryJob,
+  resendApiKey,
+  ResendDeliveryError,
+  type EmailDeliveryJob,
+  type ResendEmailSender,
+} from './email.js';
+
 /** Queue names per Decision D17. */
 export const QUEUES = {
   stripeFlowAWebhooks: 'stripe-flow-a-webhooks',
