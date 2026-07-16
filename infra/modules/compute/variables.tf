@@ -87,9 +87,9 @@ variable "github_repository" {
   type        = string
 }
 
-variable "github_oidc_subject" {
-  description = "Exact GitHub OIDC subject permitted to assume the deployment role."
-  type        = string
+variable "github_oidc_subjects" {
+  description = "Exact GitHub OIDC subjects permitted to assume the deployment role."
+  type        = set(string)
 }
 
 variable "static_site_bucket_arns" {
