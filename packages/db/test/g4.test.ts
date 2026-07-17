@@ -668,7 +668,9 @@ if (databaseUrl === undefined || databaseUrl === '') {
         ]),
       );
       assert.equal(legalUpdateState, '42501');
+    });
 
+    await withRuntimeContext(ownerContext(), async (client) => {
       const contract = await client.query<{ id: string }>(
         `
           INSERT INTO app.contract_instances
