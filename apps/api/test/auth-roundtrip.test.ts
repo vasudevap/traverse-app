@@ -146,3 +146,34 @@ test('TRA-29 completes login, role isolation, CSRF, logout, and immediate revoca
     await app.close();
   }
 });
+
+test('TRA-38 coach signup uses coach CSRF without a surface route parameter', async () => {
+  const app = await createApp(
+    { logger: false },
+    { allowedOrigins: new Set([origin]), authSessionStore: new TestAuthSessionStore([]) },
+  );
+
+  try {
+    await app.listen(0, '127.0.0.1');
+    const address = app.getHttpServer().address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/coach/signup`, {
+      body: JSON.stringify({ disciplineBand: 'prohibited' }),
+      headers: {
+        'content-type': 'application/json',
+        cookie: 'trv_csrf_coach=smoke-token',
+        origin,
+        'x-csrf-token': 'smoke-token',
+      },
+      method: 'POST',
+    });
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      error: 'Forbidden',
+      message: 'Traverse cannot be used for the selected coaching discipline.',
+      statusCode: 403,
+    });
+  } finally {
+    await app.close();
+  }
+});

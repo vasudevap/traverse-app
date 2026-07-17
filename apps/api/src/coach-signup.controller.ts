@@ -1,5 +1,5 @@
-import { Body, Controller, Headers, Post, Req, UseGuards } from '@nestjs/common';
-import { OriginCsrfGuard } from './auth.guards.js';
+import { Body, Controller, Headers, Inject, Post, Req, UseGuards } from '@nestjs/common';
+import { CoachSignupCsrfGuard } from './auth.guards.js';
 import { CoachSignupService } from './coach-signup.service.js';
 
 interface SignupRequest {
@@ -15,10 +15,13 @@ function forwardedIp(request: SignupRequest, forwardedFor: string | undefined): 
 
 @Controller('coach/signup')
 export class CoachSignupController {
-  constructor(private readonly signupService: CoachSignupService) {}
+  constructor(
+    @Inject(CoachSignupService)
+    private readonly signupService: CoachSignupService,
+  ) {}
 
   @Post()
-  @UseGuards(OriginCsrfGuard)
+  @UseGuards(CoachSignupCsrfGuard)
   async create(
     @Body() body: Record<string, unknown>,
     @Headers('user-agent') userAgent: string | undefined,
