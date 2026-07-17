@@ -2,7 +2,7 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import type { AuthSessionStore } from '@traverse/db';
 import { AUTH_CONFIG, type AuthConfig } from './auth-config.js';
 import { AuthController } from './auth.controller.js';
-import { AuthenticatedSessionGuard, OriginCsrfGuard } from './auth.guards.js';
+import { AuthenticatedSessionGuard, CoachSignupCsrfGuard, OriginCsrfGuard } from './auth.guards.js';
 import { AUTH_SESSION_STORE, AuthService } from './auth.service.js';
 import { CoachSignupController } from './coach-signup.controller.js';
 import {
@@ -53,6 +53,7 @@ export class AppModule {
         AuthService,
         CoachSignupService,
         AuthenticatedSessionGuard,
+        CoachSignupCsrfGuard,
         OriginCsrfGuard,
       ],
     };

@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { AuthenticatedSession } from '@traverse/db';
+import type { AuthRole } from './auth-security.js';
 import { AUTH_CONFIG, type AuthConfig, isAuthSurface, SURFACE_ROLES } from './auth-config.js';
 import {
   csrfTokenMatches,
@@ -36,6 +37,25 @@ function requestRole(request: AuthenticatedRequest) {
   return SURFACE_ROLES[surface];
 }
 
+function assertOriginCsrf(
+  request: AuthenticatedRequest,
+  config: AuthConfig,
+  role: AuthRole,
+): boolean {
+  const origin = headerValue(request.headers.origin);
+  const cookies = parseCookies(headerValue(request.headers.cookie));
+  const submittedToken = headerValue(request.headers['x-csrf-token']);
+  const cookieToken = cookies.get(CSRF_COOKIE_NAMES[role]);
+
+  if (
+    !isTrustedStateChangingOrigin(origin, config.allowedOrigins) ||
+    !csrfTokenMatches(submittedToken, cookieToken)
+  ) {
+    throw new ForbiddenException('Request verification failed.');
+  }
+  return true;
+}
+
 @Injectable()
 export class AuthenticatedSessionGuard implements CanActivate {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
@@ -60,19 +80,17 @@ export class OriginCsrfGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const role = requestRole(request);
-    const origin = headerValue(request.headers.origin);
-    const cookies = parseCookies(headerValue(request.headers.cookie));
-    const submittedToken = headerValue(request.headers['x-csrf-token']);
-    const cookieToken = cookies.get(CSRF_COOKIE_NAMES[role]);
+    return assertOriginCsrf(request, this.config, requestRole(request));
+  }
+}
 
-    if (
-      !isTrustedStateChangingOrigin(origin, this.config.allowedOrigins) ||
-      !csrfTokenMatches(submittedToken, cookieToken)
-    ) {
-      throw new ForbiddenException('Request verification failed.');
-    }
-    return true;
+@Injectable()
+export class CoachSignupCsrfGuard implements CanActivate {
+  constructor(@Inject(AUTH_CONFIG) private readonly config: AuthConfig) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    return assertOriginCsrf(request, this.config, 'coach');
   }
 }
 
