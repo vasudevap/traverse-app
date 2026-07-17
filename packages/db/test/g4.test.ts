@@ -43,6 +43,11 @@ if (databaseUrl === undefined || databaseUrl === '') {
   const relationshipAOwner = '00000000-0000-7000-8000-000000000301';
   const relationshipACoach = '00000000-0000-7000-8000-000000000302';
   const relationshipB = '00000000-0000-7000-8000-000000000303';
+  const contractTemplateA = '00000000-0000-7000-8000-000000000401';
+  const intakeFormA = '00000000-0000-7000-8000-000000000402';
+  const appointmentTypeA = '00000000-0000-7000-8000-000000000403';
+  const availabilityWindowA = '00000000-0000-7000-8000-000000000404';
+  const taskA = '00000000-0000-7000-8000-000000000405';
 
   const auditClient: SqlClient = {
     async query<Row extends object>(text: string, values?: unknown[]) {
@@ -246,6 +251,65 @@ if (databaseUrl === undefined || databaseUrl === '') {
           clientB,
         ],
       );
+      await seedClient.query(
+        `
+        INSERT INTO app.contract_templates
+          (id, tenant_id, coach_id, name, version, body)
+        VALUES
+          ($1, $2, $3, 'Foundation contract', 1, 'Signed service agreement snapshot')
+      `,
+        [contractTemplateA, tenantA, ownerCoachA],
+      );
+      await seedClient.query(
+        `
+        INSERT INTO app.intake_forms
+          (id, tenant_id, coach_id, name, version, form_schema)
+        VALUES
+          ($1, $2, $3, 'Foundation intake', 1, '{"type":"object"}'::jsonb)
+      `,
+        [intakeFormA, tenantA, ownerCoachA],
+      );
+      await seedClient.query(
+        `
+        UPDATE app.coaching_relationships
+        SET contract_template_id = $1, intake_form_id = $2
+        WHERE id = $3
+      `,
+        [contractTemplateA, intakeFormA, relationshipAOwner],
+      );
+      await seedClient.query(
+        `
+        INSERT INTO app.appointment_types
+          (id, tenant_id, coach_id, name, default_duration_minutes, self_bookable)
+        VALUES
+          ($1, $2, $3, 'Coaching session', 60, true)
+      `,
+        [appointmentTypeA, tenantA, ownerCoachA],
+      );
+      await seedClient.query(
+        `
+        INSERT INTO app.availability_windows
+          (
+            id, tenant_id, coach_id, window_type, slot_starts_at, slot_ends_at,
+            timezone
+          )
+        VALUES
+          (
+            $1, $2, $3, 'slot', '2026-08-03T15:00:00.000Z',
+            '2026-08-03T16:00:00.000Z', 'America/Toronto'
+          )
+      `,
+        [availabilityWindowA, tenantA, ownerCoachA],
+      );
+      await seedClient.query(
+        `
+        INSERT INTO app.tasks
+          (id, tenant_id, relationship_id, title, description)
+        VALUES
+          ($1, $2, $3, 'Complete prep', 'Bring one coaching goal.')
+      `,
+        [taskA, tenantA, relationshipAOwner],
+      );
       await seedClient.query('COMMIT');
     } catch (error) {
       await seedClient.query('ROLLBACK');
@@ -275,7 +339,13 @@ if (databaseUrl === undefined || databaseUrl === '') {
 
   test('G4 accepts the core tenant tables and read-only tenant key contract', async () => {
     await assertRlsContract(auditClient, {
-      readOnlyTables: ['auth_subjects', 'tenant_keys'],
+      appendOnlyTables: [
+        'contract_instances',
+        'contract_signatures',
+        'event_log',
+        'legal_acceptances',
+      ],
+      readOnlyTables: ['auth_subjects', 'billing_plans', 'legal_documents', 'tenant_keys'],
       schema: 'app',
       tenantTables: [...CORE_TENANT_TABLES],
     });
@@ -518,6 +588,222 @@ if (databaseUrl === undefined || databaseUrl === '') {
       ),
     );
     assert.equal(updateState, '42501');
+  });
+
+  test('Stage 2 intake responses store ciphertext and become immutable after submit', async () => {
+    await withRuntimeContext(clientContext(), async (client) => {
+      const ciphertext = Buffer.from('ciphertext-not-json-or-plaintext-stage2-d21');
+      const inserted = await client.query<{ answers_enc: Buffer; answers_key_version: number }>(
+        `
+          INSERT INTO app.intake_responses
+            (
+              tenant_id, relationship_id, intake_form_id, form_version, answers_enc,
+              answers_key_version
+            )
+          VALUES ($1, $2, $3, 1, $4, 1)
+          RETURNING answers_enc, answers_key_version
+        `,
+        [tenantA, relationshipAOwner, intakeFormA, ciphertext],
+      );
+
+      assert.equal(inserted.rows[0]?.answers_key_version, 1);
+      assert.equal(inserted.rows[0]?.answers_enc.toString('utf8').includes('coachingGoal'), false);
+
+      const submitted = await client.query(
+        `
+          UPDATE app.intake_responses
+          SET answers_enc = $1, submitted_at = now()
+          WHERE tenant_id = $2 AND relationship_id = $3
+        `,
+        [Buffer.from('ciphertext-updated-stage2-d21-envelope'), tenantA, relationshipAOwner],
+      );
+      assert.equal(submitted.rowCount, 1);
+
+      const updateState = await sqlState(() =>
+        client.query(
+          `
+            UPDATE app.intake_responses
+            SET answers_enc = $1
+            WHERE tenant_id = $2 AND relationship_id = $3
+          `,
+          [Buffer.from('ciphertext-after-submit-stage2-d21'), tenantA, relationshipAOwner],
+        ),
+      );
+      assert.equal(updateState, '42501');
+    });
+  });
+
+  test('Stage 2 append-only evidence permits inserts but rejects mutation', async () => {
+    await withRuntimeContext(ownerContext(), async (client) => {
+      const document = await client.query<{
+        document_type: string;
+        id: string;
+        version: string;
+      }>(
+        `
+          SELECT id, document_type, version
+          FROM app.legal_documents
+          WHERE document_type = 'coach_terms'
+        `,
+      );
+
+      const legalAcceptance = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.legal_acceptances
+            (user_id, legal_document_id, document_type, version, user_agent)
+          VALUES ($1, $2, $3, $4, 'node-test')
+          RETURNING id
+        `,
+        [
+          ownerUserA,
+          document.rows[0]?.id,
+          document.rows[0]?.document_type,
+          document.rows[0]?.version,
+        ],
+      );
+      const legalUpdateState = await sqlState(() =>
+        client.query('UPDATE app.legal_acceptances SET user_agent = $1 WHERE id = $2', [
+          'changed',
+          legalAcceptance.rows[0]?.id,
+        ]),
+      );
+      assert.equal(legalUpdateState, '42501');
+
+      const contract = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.contract_instances
+            (tenant_id, relationship_id, template_id, template_version, signed_snapshot)
+          VALUES ($1, $2, $3, 1, 'Signed service agreement snapshot')
+          RETURNING id
+        `,
+        [tenantA, relationshipAOwner, contractTemplateA],
+      );
+      const contractUpdateState = await sqlState(() =>
+        client.query('UPDATE app.contract_instances SET signed_snapshot = $1 WHERE id = $2', [
+          'changed',
+          contract.rows[0]?.id,
+        ]),
+      );
+      assert.equal(contractUpdateState, '42501');
+    });
+  });
+
+  test('Stage 2 legal acceptances must match the accepted document snapshot', async () => {
+    const document = await pool.query<{
+      document_type: string;
+      id: string;
+    }>(
+      `
+        SELECT id, document_type
+        FROM app.legal_documents
+        WHERE document_type = 'acceptable_use_policy'
+      `,
+    );
+
+    const mismatchState = await withRuntimeContext(regularCoachContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.legal_acceptances
+              (user_id, legal_document_id, document_type, version)
+            VALUES ($1, $2, $3, 'wrong-version')
+          `,
+          [coachUserA, document.rows[0]?.id, document.rows[0]?.document_type],
+        ),
+      ),
+    );
+    assert.equal(mismatchState, '23503');
+  });
+
+  test('Stage 2 clients can complete tasks but cannot rewrite assignments', async () => {
+    await withRuntimeContext(clientContext(), async (client) => {
+      const completed = await client.query(
+        `
+          UPDATE app.tasks
+          SET status = 'completed', completed_at = now()
+          WHERE id = $1
+        `,
+        [taskA],
+      );
+      assert.equal(completed.rowCount, 1);
+
+      const rewriteState = await sqlState(() =>
+        client.query('UPDATE app.tasks SET title = $1 WHERE id = $2', ['Changed', taskA]),
+      );
+      assert.equal(rewriteState, '42501');
+    });
+  });
+
+  test('Stage 2 booking holds and appointments reject double-booked slots', async () => {
+    await withRuntimeContext(clientContext(), async (client) => {
+      await client.query(
+        `
+          INSERT INTO app.booking_holds
+            (
+              tenant_id, availability_window_id, client_id, starts_at, ends_at,
+              expires_at
+            )
+          VALUES (
+            $1, $2, $3, '2026-08-03T15:00:00.000Z',
+            '2026-08-03T16:00:00.000Z', '2026-08-03T14:55:00.000Z'
+          )
+        `,
+        [tenantA, availabilityWindowA, clientA],
+      );
+
+      const duplicateHoldState = await sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.booking_holds
+              (
+                tenant_id, availability_window_id, client_id, starts_at, ends_at,
+                expires_at
+              )
+            VALUES (
+              $1, $2, $3, '2026-08-03T15:00:00.000Z',
+              '2026-08-03T16:00:00.000Z', '2026-08-03T14:55:00.000Z'
+            )
+          `,
+          [tenantA, availabilityWindowA, clientA],
+        ),
+      );
+      assert.equal(duplicateHoldState, '23505');
+    });
+
+    await withRuntimeContext(ownerContext(), async (client) => {
+      await client.query(
+        `
+          INSERT INTO app.appointments
+            (
+              tenant_id, coach_id, relationship_id, appointment_type_id, title,
+              starts_at, ends_at
+            )
+          VALUES (
+            $1, $2, $3, $4, 'Coaching session',
+            '2026-08-04T15:00:00.000Z', '2026-08-04T16:00:00.000Z'
+          )
+        `,
+        [tenantA, ownerCoachA, relationshipAOwner, appointmentTypeA],
+      );
+
+      const overlapState = await sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.appointments
+              (
+                tenant_id, coach_id, relationship_id, appointment_type_id, title,
+                starts_at, ends_at
+              )
+            VALUES (
+              $1, $2, $3, $4, 'Overlapping session',
+              '2026-08-04T15:30:00.000Z', '2026-08-04T16:30:00.000Z'
+            )
+          `,
+          [tenantA, ownerCoachA, relationshipAOwner, appointmentTypeA],
+        ),
+      );
+      assert.equal(overlapState, '23P01');
+    });
   });
 
   test('tenant roots are isolated and migration metadata is unavailable to runtime', async () => {

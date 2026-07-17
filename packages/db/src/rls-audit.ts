@@ -9,6 +9,7 @@ export interface RlsAuditOptions {
   schema: string;
   tenantTables: string[];
   readOnlyTables?: string[];
+  appendOnlyTables?: string[];
   runtimeRole?: string;
   ddlRole?: string;
 }
@@ -42,6 +43,10 @@ interface MutationPrivilegeRow {
   can_delete: boolean;
   can_insert: boolean;
   can_update: boolean;
+}
+
+interface AppendOnlyAuditRow extends MutationPrivilegeRow {
+  immutability_trigger: boolean;
 }
 
 interface OwnedTableRow {
@@ -84,6 +89,7 @@ export async function auditRlsContract(
   const ddlRole = options.ddlRole ?? 'traverse_ddl';
   const tenantTables = [...new Set(options.tenantTables)].sort();
   const readOnlyTables = [...new Set(options.readOnlyTables ?? [])].sort();
+  const appendOnlyTables = [...new Set(options.appendOnlyTables ?? [])].sort();
   const errors: string[] = [];
 
   if (tenantTables.length === 0) {
@@ -242,6 +248,57 @@ export async function auditRlsContract(
   for (const row of mutationPrivilegeResult.rows) {
     if (row.can_delete || row.can_insert || row.can_update) {
       errors.push(`${runtimeRole}: ${options.schema}.${row.table_name} must be read-only.`);
+    }
+  }
+
+  const appendOnlyResult = await client.query<AppendOnlyAuditRow>(
+    `
+      SELECT
+        table_name,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'DELETE'
+        ) AS can_delete,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'INSERT'
+        ) AS can_insert,
+        has_table_privilege(
+          $1,
+          quote_ident($2) || '.' || quote_ident(table_name),
+          'UPDATE'
+        ) AS can_update,
+        EXISTS (
+          SELECT 1
+          FROM pg_trigger AS trigger
+          WHERE trigger.tgrelid = to_regclass(quote_ident($2) || '.' || quote_ident(table_name))
+            AND NOT trigger.tgisinternal
+            AND trigger.tgenabled <> 'D'
+            AND (trigger.tgtype & 8) = 8
+            AND (trigger.tgtype & 16) = 16
+        ) AS immutability_trigger
+      FROM unnest($3::text[]) AS table_name
+      WHERE to_regclass(quote_ident($2) || '.' || quote_ident(table_name)) IS NOT NULL
+    `,
+    [runtimeRole, options.schema, appendOnlyTables],
+  );
+  for (const row of appendOnlyResult.rows) {
+    if (!row.can_insert) {
+      errors.push(
+        `${runtimeRole}: INSERT privilege on append-only table ${options.schema}.${row.table_name} is required.`,
+      );
+    }
+    if (row.can_update || row.can_delete) {
+      errors.push(
+        `${runtimeRole}: ${options.schema}.${row.table_name} must reject UPDATE and DELETE.`,
+      );
+    }
+    if (!row.immutability_trigger) {
+      errors.push(
+        `${options.schema}.${row.table_name}: an enabled UPDATE/DELETE immutability trigger is required.`,
+      );
     }
   }
 
