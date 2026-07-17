@@ -25,6 +25,10 @@ export class TestAuthSessionStore implements AuthSessionStore {
     return this.subjects.find((subject) => subject.email === email && subject.role === role);
   }
 
+  async findSubjectByUserId(userId: string, role: AuthRole): Promise<AuthSubject | undefined> {
+    return this.subjects.find((subject) => subject.userId === userId && subject.role === role);
+  }
+
   async rotateSession(input: RotateSessionInput): Promise<void> {
     if (input.previousTokenHash !== undefined) {
       const previous = this.sessions.get(hashKey(input.previousTokenHash));

@@ -30,6 +30,14 @@ export interface LoginResult {
   subject: Omit<AuthSubject, 'passwordHash'>;
 }
 
+export interface StartSessionInput {
+  ip: string | null;
+  previousToken?: string;
+  role: AuthRole;
+  userAgent: string | null;
+  userId: string;
+}
+
 function publicSubject(subject: AuthSubject): Omit<AuthSubject, 'passwordHash'> {
   return {
     clientId: subject.clientId,
@@ -66,6 +74,21 @@ export class AuthService implements OnApplicationShutdown {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    return this.createSession(subject, input);
+  }
+
+  async startSession(input: StartSessionInput): Promise<LoginResult> {
+    const subject = await this.store.findSubjectByUserId(input.userId, input.role);
+    if (subject === undefined || subject.status !== 'active') {
+      throw new UnauthorizedException('Authentication required.');
+    }
+    return this.createSession(subject, input);
+  }
+
+  private async createSession(
+    subject: AuthSubject,
+    input: Pick<StartSessionInput, 'ip' | 'previousToken' | 'role' | 'userAgent'>,
+  ): Promise<LoginResult> {
     const now = new Date();
     const sessionToken = createOpaqueToken();
     const csrfToken = createOpaqueToken();

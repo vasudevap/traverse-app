@@ -211,9 +211,14 @@ export interface ClientInviteTable extends AuditColumns {
   contract_template_id: string | null;
   intake_form_id: string | null;
   proposed_slots: Generated<JsonValue>;
-  expires_at: Generated<Timestamp>;
+  expires_at: Timestamp;
   accepted_at: NullableTimestamp;
   revoked_at: NullableTimestamp;
+  declined_at: NullableTimestamp;
+  opened_at: NullableTimestamp;
+  sent_at: Timestamp;
+  last_sent_at: Timestamp;
+  send_count: Generated<number>;
   relationship_id: string | null;
 }
 

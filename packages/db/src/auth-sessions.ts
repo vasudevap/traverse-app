@@ -33,6 +33,7 @@ export interface RotateSessionInput {
 export interface AuthSessionStore {
   close?(): Promise<void>;
   findSubject(email: string, role: ActorRole): Promise<AuthSubject | undefined>;
+  findSubjectByUserId(userId: string, role: ActorRole): Promise<AuthSubject | undefined>;
   revokeSession(tokenHash: Buffer, role: ActorRole, revokedAt: Date): Promise<boolean>;
   rotateSession(input: RotateSessionInput): Promise<void>;
   validateSession(
@@ -94,6 +95,30 @@ export class DatabaseAuthSessionStore implements AuthSessionStore {
         'user.id as user_id',
       ])
       .where('user.email', '=', email)
+      .where('subject.role', '=', role)
+      .executeTakeFirst();
+
+    return row === undefined ? undefined : mapSubject(row);
+  }
+
+  async findSubjectByUserId(userId: string, role: ActorRole): Promise<AuthSubject | undefined> {
+    const database = this.database.withSchema('app');
+    const row = await database
+      .selectFrom('users as user')
+      .innerJoin('auth_subjects as subject', 'subject.user_id', 'user.id')
+      .select([
+        'subject.client_id',
+        'subject.coach_id',
+        'user.email',
+        'user.name',
+        'user.password_hash',
+        'subject.practice_role',
+        'subject.role',
+        'user.status',
+        'subject.tenant_id',
+        'user.id as user_id',
+      ])
+      .where('user.id', '=', userId)
       .where('subject.role', '=', role)
       .executeTakeFirst();
 
