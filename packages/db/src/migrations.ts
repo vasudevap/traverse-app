@@ -10,11 +10,13 @@ import { coreTenantModelMigration } from './migrations/001-core-tenant-model.js'
 import { pgBossAccessMigration } from './migrations/002-pgboss-access.js';
 import { authSessionRoundtripMigration } from './migrations/003-auth-session-roundtrip.js';
 import { stage2CoreDomainMigration } from './migrations/004-stage2-core-domain.js';
+import { coachSignupFlowBMigration } from './migrations/005-coach-signup-flow-b.js';
 
 export const MIGRATION_NAME = '20260714_001_core_tenant_model';
 export const PGBOSS_ACCESS_MIGRATION_NAME = '20260715_002_pgboss_access';
 export const AUTH_SESSION_MIGRATION_NAME = '20260715_003_auth_session_roundtrip';
 export const STAGE2_CORE_DOMAIN_MIGRATION_NAME = '20260717_004_stage2_core_domain';
+export const COACH_SIGNUP_FLOW_B_MIGRATION_NAME = '20260717_005_coach_signup_flow_b';
 export const CORE_TENANT_TABLES = [
   'appointment_types',
   'appointments',
@@ -46,6 +48,7 @@ const provider: MigrationProvider = {
       [PGBOSS_ACCESS_MIGRATION_NAME]: pgBossAccessMigration,
       [AUTH_SESSION_MIGRATION_NAME]: authSessionRoundtripMigration,
       [STAGE2_CORE_DOMAIN_MIGRATION_NAME]: stage2CoreDomainMigration,
+      [COACH_SIGNUP_FLOW_B_MIGRATION_NAME]: coachSignupFlowBMigration,
     };
   },
 };
