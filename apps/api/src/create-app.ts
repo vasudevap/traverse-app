@@ -34,6 +34,20 @@ function missingSignupDependency(label: string): never {
   throw new Error(`${label} is required for coach signup routes.`);
 }
 
+function configuredKmsKeyId(): string {
+  const explicitKeyId = process.env.APP_KMS_KEY_ID;
+  if (explicitKeyId !== undefined && explicitKeyId.trim() !== '') {
+    return explicitKeyId;
+  }
+  if (
+    process.env.DEPLOYMENT_ENVIRONMENT === 'nonprod' ||
+    process.env.DEPLOYMENT_ENVIRONMENT === 'prod'
+  ) {
+    return `alias/traverse/${process.env.DEPLOYMENT_ENVIRONMENT}/application`;
+  }
+  throw new Error('APP_KMS_KEY_ID is required when DEPLOYMENT_ENVIRONMENT is not set.');
+}
+
 const missingSignupStore: CoachSignupStore = {
   activateVerifiedSignup: async () => missingSignupDependency('signupStore'),
   createPendingSignup: async () => missingSignupDependency('signupStore'),
@@ -48,10 +62,6 @@ function environmentDependencies(): AppDependencies {
     ssl: { rejectUnauthorized: true },
   });
   const appBaseUrl = process.env.COACH_APP_BASE_URL ?? 'https://app.traversecoaching.com';
-  const kmsKeyId = process.env.APP_KMS_KEY_ID;
-  if (kmsKeyId === undefined || kmsKeyId.trim() === '') {
-    throw new Error('APP_KMS_KEY_ID is required.');
-  }
   return {
     allowedOrigins: configuredAllowedOrigins(
       process.env.AUTH_ALLOWED_ORIGINS,
@@ -65,7 +75,7 @@ function environmentDependencies(): AppDependencies {
       process.env.SIGNUP_EMAIL_FROM ?? 'Traverse <hello@traversecoaching.com>',
     ),
     signupStore: new DatabaseCoachSignupStore(database),
-    tenantKeyGenerator: new AwsTenantKeyGenerator(kmsKeyId),
+    tenantKeyGenerator: new AwsTenantKeyGenerator(configuredKmsKeyId()),
   };
 }
 
