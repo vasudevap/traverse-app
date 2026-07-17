@@ -63,6 +63,77 @@ running_task_arns() {
   printf '%s\n' "${running_tasks[*]}"
 }
 
+print_service_diagnostics() {
+  local service="$1"
+  local stopped_tasks
+
+  printf 'ECS service did not stabilize: %s\n' "$service" >&2
+  aws ecs describe-services \
+    --region "$AWS_REGION" \
+    --cluster "$ECS_CLUSTER" \
+    --services "$service" \
+    --query 'services[0].{
+      serviceName: serviceName,
+      desiredCount: desiredCount,
+      runningCount: runningCount,
+      pendingCount: pendingCount,
+      deployments: deployments[].{
+        status: status,
+        rolloutState: rolloutState,
+        rolloutStateReason: rolloutStateReason,
+        taskDefinition: taskDefinition,
+        desiredCount: desiredCount,
+        runningCount: runningCount,
+        pendingCount: pendingCount,
+        failedTasks: failedTasks
+      },
+      events: events[0:10].{createdAt: createdAt, message: message}
+    }' \
+    --output json >&2 || true
+
+  stopped_tasks=$(aws ecs list-tasks \
+    --region "$AWS_REGION" \
+    --cluster "$ECS_CLUSTER" \
+    --service-name "$service" \
+    --desired-status STOPPED \
+    --max-results 10 \
+    --query 'taskArns' \
+    --output text || true)
+
+  if [[ -n "$stopped_tasks" && "$stopped_tasks" != "None" ]]; then
+    aws ecs describe-tasks \
+      --region "$AWS_REGION" \
+      --cluster "$ECS_CLUSTER" \
+      --tasks $stopped_tasks \
+      --query 'tasks[].{
+        taskArn: taskArn,
+        lastStatus: lastStatus,
+        stopCode: stopCode,
+        stoppedReason: stoppedReason,
+        containers: containers[].{
+          name: name,
+          lastStatus: lastStatus,
+          exitCode: exitCode,
+          reason: reason,
+          healthStatus: healthStatus
+        }
+      }' \
+      --output json >&2 || true
+  fi
+}
+
+wait_for_service_stable() {
+  local service="$1"
+
+  if ! aws ecs wait services-stable \
+    --region "$AWS_REGION" \
+    --cluster "$ECS_CLUSTER" \
+    --services "$service"; then
+    print_service_diagnostics "$service"
+    return 1
+  fi
+}
+
 api_service="traverse-${DEPLOYMENT_ENVIRONMENT}-api"
 api_image="${ECR_REGISTRY}/traverse-${DEPLOYMENT_ENVIRONMENT}-api@${IMAGE_DIGEST}"
 
@@ -122,10 +193,7 @@ for service in "${services[@]}"; do
     --desired-count 1 \
     --force-new-deployment >/dev/null
 
-  aws ecs wait services-stable \
-    --region "$AWS_REGION" \
-    --cluster "$ECS_CLUSTER" \
-    --services "traverse-${DEPLOYMENT_ENVIRONMENT}-${service}"
+  wait_for_service_stable "traverse-${DEPLOYMENT_ENVIRONMENT}-${service}"
 done
 
 service_names=()
@@ -138,10 +206,15 @@ initial_tasks=$(running_task_arns "${service_names[@]}")
 printf 'Observing ECS task stability for %s seconds.\n' "$STABILITY_OBSERVATION_SECONDS"
 sleep "$STABILITY_OBSERVATION_SECONDS"
 
-aws ecs wait services-stable \
+if ! aws ecs wait services-stable \
   --region "$AWS_REGION" \
   --cluster "$ECS_CLUSTER" \
-  --services "${service_names[@]}"
+  --services "${service_names[@]}"; then
+  for service in "${service_names[@]}"; do
+    print_service_diagnostics "$service"
+  done
+  exit 1
+fi
 
 final_tasks=$(running_task_arns "${service_names[@]}")
 

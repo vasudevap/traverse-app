@@ -151,13 +151,16 @@ export class ResendSignupEmailSender implements SignupEmailSender {
 }
 
 export class StripeFlowBBillingClient implements FlowBBillingClient {
-  private readonly config: StripeSecretConfig;
+  private config: StripeSecretConfig | undefined;
 
   constructor(
-    rawSecret: string | undefined,
+    private readonly rawSecret: string | undefined,
     private readonly fetchImplementation: typeof fetch = fetch,
-  ) {
-    this.config = parseStripeSecret(rawSecret);
+  ) {}
+
+  private stripeConfig(): StripeSecretConfig {
+    this.config ??= parseStripeSecret(this.rawSecret);
+    return this.config;
   }
 
   async createTrialSubscription(input: {
@@ -169,7 +172,8 @@ export class StripeFlowBBillingClient implements FlowBBillingClient {
     tenantId: string;
     trialDays: number;
   }) {
-    const secretKey = this.config.secretKey ?? '';
+    const config = this.stripeConfig();
+    const secretKey = config.secretKey ?? '';
     const customer = await stripeRequest(
       secretKey,
       'customers',
@@ -192,11 +196,7 @@ export class StripeFlowBBillingClient implements FlowBBillingClient {
       'subscriptions',
       new URLSearchParams({
         customer: stripeCustomerId,
-        'items[0][price]': requiredPriceId(
-          this.config.priceIds,
-          input.planCode,
-          input.billingInterval,
-        ),
+        'items[0][price]': requiredPriceId(config.priceIds, input.planCode, input.billingInterval),
         'metadata[tenant_id]': input.tenantId,
         payment_behavior: 'default_incomplete',
         trial_end: String(unixSeconds(trialEndsAt)),
@@ -226,8 +226,9 @@ export class StripeFlowBBillingClient implements FlowBBillingClient {
     if (signature === undefined || signature.trim() === '') {
       throw new Error('Stripe signature is required.');
     }
-    if (this.config.webhookSecret !== undefined && this.config.webhookSecret.trim() !== '') {
-      verifyStripeSignature(rawBody, signature, this.config.webhookSecret);
+    const config = this.stripeConfig();
+    if (config.webhookSecret !== undefined && config.webhookSecret.trim() !== '') {
+      verifyStripeSignature(rawBody, signature, config.webhookSecret);
     }
     if (typeof payload !== 'object' || payload === null) {
       throw new Error('Stripe webhook payload must be an object.');
