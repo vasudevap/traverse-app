@@ -30,6 +30,7 @@ export {
   AUTH_SESSION_MIGRATION_NAME,
   MIGRATION_NAME,
   PGBOSS_ACCESS_MIGRATION_NAME,
+  STAGE2_CORE_DOMAIN_MIGRATION_NAME,
   migrateToEmpty,
   migrateToLatest,
 } from './migrations.js';
@@ -39,5 +40,5 @@ export {
   type RlsAuditOptions,
   type SqlClient,
 } from './rls-audit.js';
-export type { ActorRole, AuthTokenPurpose, Database, PracticeRole } from './schema.js';
+export type { ActorRole, AuthTokenPurpose, Database, JsonValue, PracticeRole } from './schema.js';
 export { withTenantContext, type TenantContext, type TenantTransaction } from './tenant-context.js';

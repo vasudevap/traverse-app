@@ -9,11 +9,35 @@ import {
 import { coreTenantModelMigration } from './migrations/001-core-tenant-model.js';
 import { pgBossAccessMigration } from './migrations/002-pgboss-access.js';
 import { authSessionRoundtripMigration } from './migrations/003-auth-session-roundtrip.js';
+import { stage2CoreDomainMigration } from './migrations/004-stage2-core-domain.js';
 
 export const MIGRATION_NAME = '20260714_001_core_tenant_model';
 export const PGBOSS_ACCESS_MIGRATION_NAME = '20260715_002_pgboss_access';
 export const AUTH_SESSION_MIGRATION_NAME = '20260715_003_auth_session_roundtrip';
-export const CORE_TENANT_TABLES = ['tenant_keys', 'coaches', 'coaching_relationships'] as const;
+export const STAGE2_CORE_DOMAIN_MIGRATION_NAME = '20260717_004_stage2_core_domain';
+export const CORE_TENANT_TABLES = [
+  'appointment_types',
+  'appointments',
+  'availability_windows',
+  'booking_holds',
+  'client_invites',
+  'coach_billing_customers',
+  'coach_subscriptions',
+  'coaches',
+  'coaching_relationships',
+  'contract_instances',
+  'contract_signatures',
+  'contract_templates',
+  'event_log',
+  'exports',
+  'group_memberships',
+  'groups',
+  'imports',
+  'intake_forms',
+  'intake_responses',
+  'tasks',
+  'tenant_keys',
+] as const;
 
 const provider: MigrationProvider = {
   async getMigrations() {
@@ -21,6 +45,7 @@ const provider: MigrationProvider = {
       [MIGRATION_NAME]: coreTenantModelMigration,
       [PGBOSS_ACCESS_MIGRATION_NAME]: pgBossAccessMigration,
       [AUTH_SESSION_MIGRATION_NAME]: authSessionRoundtripMigration,
+      [STAGE2_CORE_DOMAIN_MIGRATION_NAME]: stage2CoreDomainMigration,
     };
   },
 };
