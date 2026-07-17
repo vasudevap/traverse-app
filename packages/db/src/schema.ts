@@ -46,6 +46,7 @@ export interface AuthTokenTable {
   token_hash: Buffer;
   expires_at: Timestamp;
   used_at: NullableTimestamp;
+  metadata: Generated<JsonValue>;
   created_at: Generated<Timestamp>;
 }
 
@@ -369,6 +370,16 @@ export interface ImportTable extends AuditColumns {
   error_report_ref: string | null;
 }
 
+export interface StripeWebhookEventTable {
+  id: Generated<string>;
+  flow: string;
+  stripe_event_id: string;
+  event_type: string;
+  payload: JsonValue;
+  processed_at: Generated<Timestamp>;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   appointment_types: AppointmentTypeTable;
   appointments: AppointmentTable;
@@ -396,6 +407,7 @@ export interface Database {
   legal_acceptances: LegalAcceptanceTable;
   legal_documents: LegalDocumentTable;
   sessions: SessionTable;
+  stripe_webhook_events: StripeWebhookEventTable;
   tasks: TaskTable;
   tenant_keys: TenantKeyTable;
   tenants: TenantTable;
