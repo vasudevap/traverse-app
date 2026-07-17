@@ -1027,6 +1027,8 @@ async function up(database: Kysely<unknown>): Promise<void> {
 async function down(database: Kysely<unknown>): Promise<void> {
   await sql`SET LOCAL ROLE traverse_ddl`.execute(database);
   await sql`
+    DROP POLICY IF EXISTS groups_client_select ON app.groups;
+
     DROP TABLE app.imports;
     DROP TABLE app.exports;
     DROP TABLE app.event_log;
