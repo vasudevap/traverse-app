@@ -781,3 +781,179 @@
 .coach-contract-consent input {
   margin-top: 4px;
 }
+
+.coach-loop-actions,
+.coach-loop-section__heading,
+.coach-relationship-card__top,
+.coach-appointment-row,
+.coach-task-row,
+.coach-loop-compact-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coach-loop-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.coach-loop-stack,
+.coach-loop-section,
+.coach-loop-form,
+.coach-loop-compact-list {
+  display: grid;
+  gap: 16px;
+}
+
+.coach-loop-section {
+  padding: clamp(20px, 4vw, 32px);
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-editorial);
+  box-shadow: var(--trv-shadow);
+}
+
+.coach-loop-section__heading h2,
+.coach-loop-section__heading h3,
+.coach-relationship-card h3,
+.coach-appointment-row h3,
+.coach-task-row h3 {
+  margin: 0;
+}
+
+.coach-loop-section__heading p,
+.coach-relationship-card p,
+.coach-appointment-row p,
+.coach-task-row p {
+  margin: 4px 0 0;
+}
+
+.coach-relationship-grid,
+.coach-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.coach-relationship-card,
+.coach-appointment-row,
+.coach-task-row {
+  padding: 18px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-panel);
+}
+
+.coach-relationship-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.coach-relationship-card__facts span,
+.coach-loop-muted {
+  color: var(--trv-text-secondary);
+  font-size: 14px;
+}
+
+.coach-loop-form-grid,
+.coach-workspace-grid,
+.coach-loop-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.coach-loop-form label,
+.coach-workspace-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--trv-text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.coach-loop-form input,
+.coach-loop-form select,
+.coach-loop-form textarea,
+.coach-workspace-grid input,
+.coach-workspace-grid textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-editorial);
+  color: var(--trv-text);
+  font: inherit;
+}
+
+.coach-loop-check {
+  display: flex !important;
+  grid-column: 1 / -1;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.coach-loop-check input {
+  width: auto;
+}
+
+.coach-loop-reschedule {
+  padding: 16px;
+  border-left: 3px solid var(--trv-accent);
+  background: var(--trv-surface-panel);
+}
+
+.coach-appointment-row,
+.coach-task-row,
+.coach-loop-compact-list > div {
+  align-items: flex-start;
+}
+
+.coach-appointment-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.coach-appointment-row + .coach-appointment-row,
+.coach-task-row + .coach-task-row,
+.coach-loop-compact-list > div + div {
+  margin-top: 10px;
+  border-top: 1px solid var(--trv-line);
+}
+
+.coach-loop-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.coach-notes-textarea {
+  min-height: 220px;
+  resize: vertical;
+}
+
+@media (max-width: 800px) {
+  .coach-loop-form-grid,
+  .coach-workspace-grid,
+  .coach-loop-inline-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-loop-section__heading,
+  .coach-appointment-row,
+  .coach-task-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .coach-loop-actions .trv-button {
+    width: 100%;
+  }
+}

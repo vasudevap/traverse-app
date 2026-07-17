@@ -270,6 +270,7 @@ export interface GroupMembershipTable {
   id: Generated<string>;
   tenant_id: string;
   group_id: string;
+  coach_id: string;
   client_id: string;
   joined_at: Generated<Timestamp>;
   created_at: Generated<Timestamp>;
@@ -320,11 +321,14 @@ export interface AppointmentTable extends AuditColumns {
   relationship_id: string | null;
   group_id: string | null;
   appointment_type_id: string | null;
+  booking_hold_id: string | null;
   title: string;
   starts_at: Timestamp;
   ends_at: Timestamp;
   meeting_link: string | null;
+  notes: string | null;
   status: Generated<string>;
+  timezone: string;
   booked_by_client_id: string | null;
   canceled_at: NullableTimestamp;
 }
@@ -335,6 +339,7 @@ export interface TaskTable extends AuditColumns {
   relationship_id: string;
   title: string;
   description: string | null;
+  due_at: NullableTimestamp;
   status: Generated<string>;
   completed_at: NullableTimestamp;
 }

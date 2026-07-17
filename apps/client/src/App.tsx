@@ -1,5 +1,7 @@
 import {
   ApiResponseError,
+  type ClientLoopHome,
+  createClientLoopApiClient,
   createClientOnboardingApiClient,
   type InvitePreview,
   type OnboardingSnapshot,
@@ -18,10 +20,11 @@ import {
 import { type FormEvent, useEffect, useState } from 'react';
 
 const onboardingApi = createClientOnboardingApiClient();
+const loopApi = createClientLoopApiClient();
 
 const navigation = [
-  { current: true, href: '#today', label: 'Today' },
-  { href: '#reflections', label: 'Reflections' },
+  { current: true, href: '/', label: 'Today' },
+  { href: '#tasks', label: 'Tasks' },
   { href: '#sessions', label: 'Sessions' },
 ];
 
@@ -31,33 +34,279 @@ function errorMessage(error: unknown): string {
 }
 
 function ClientDashboard() {
+  const [home, setHome] = useState<ClientLoopHome | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      setHome(await loopApi.current());
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function completeTask(taskId: string) {
+    setBusy(taskId);
+    setError(null);
+    try {
+      await loopApi.completeTask(taskId);
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function book(relationshipId: string, availabilityId: string, appointmentTypeId: string) {
+    setBusy(availabilityId);
+    setError(null);
+    let holdId: string | null = null;
+    try {
+      const hold = await loopApi.createHold({ availabilityId, relationshipId });
+      holdId = hold.id;
+      await loopApi.confirmBooking(hold.id, { appointmentTypeId, relationshipId });
+      await load();
+    } catch (caught) {
+      if (holdId !== null) {
+        try {
+          await loopApi.releaseHold(holdId);
+        } catch {
+          // The hold may already be converted or expired.
+        }
+      }
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (home === null) {
+    return (
+      <main className="onboarding-page onboarding-state" aria-busy="true">
+        <span className="trv-wordmark">Traverse</span>
+        <p>{error ?? 'Opening your coaching space...'}</p>
+        {error ? (
+          <Button onClick={() => void load()} type="button">
+            Try again
+          </Button>
+        ) : null}
+      </main>
+    );
+  }
+
+  const upcoming = home.appointments.filter(
+    (appointment) =>
+      appointment.status !== 'canceled' && new Date(appointment.endsAt).getTime() >= Date.now(),
+  );
+  const openTasks = home.tasks.filter((task) => task.status === 'assigned');
+  const nextTaskId = home.nextAction.kind === 'task' ? home.nextAction.taskId : null;
+  const nextAppointmentId =
+    home.nextAction.kind === 'appointment' ? home.nextAction.appointmentId : null;
+  const nextAppointment =
+    nextAppointmentId !== null
+      ? home.appointments.find((appointment) => appointment.id === nextAppointmentId)
+      : undefined;
+
   return (
     <AppShell navigation={navigation} productName="Your coaching space" roleLabel="Client">
       <div className="client-dashboard">
         <PageHeader
           eyebrow="Your coaching space"
-          summary="A small place to pause, reflect, and keep moving."
+          summary="Your sessions and commitments, organized around each coaching relationship."
           title="Today"
         />
-        <Card tone="editorial">
-          <Badge tone="accent">From your coach</Badge>
-          <h2>What is one thing you want to carry into this week?</h2>
-          <p>Take a moment when it suits you. Your reflection stays between you and your coach.</p>
-          <Button type="button">Record a reflection</Button>
+        {error ? (
+          <div className="onboarding-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <Card className="client-next-action" tone="editorial">
+          <Badge tone="accent">Next step</Badge>
+          {home.nextAction.kind === 'waiting' ? (
+            <>
+              <h2>Your coach is preparing what comes next.</h2>
+              <p>{home.nextAction.message}</p>
+            </>
+          ) : home.nextAction.kind === 'task' ? (
+            <>
+              <h2>{home.nextAction.title}</h2>
+              <p>Complete this coaching task when you are ready.</p>
+              <Button
+                disabled={busy === nextTaskId}
+                onClick={() => {
+                  if (nextTaskId !== null) void completeTask(nextTaskId);
+                }}
+                type="button"
+              >
+                {busy === nextTaskId ? 'Completing...' : 'Mark complete'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <h2>{home.nextAction.title}</h2>
+              <p>
+                {new Date(home.nextAction.startsAt).toLocaleString([], {
+                  dateStyle: 'full',
+                  timeStyle: 'short',
+                })}
+              </p>
+              {nextAppointment?.meetingLink ? (
+                <a
+                  className="trv-button trv-button--primary"
+                  href={nextAppointment.meetingLink}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Join session
+                </a>
+              ) : null}
+            </>
+          )}
         </Card>
-        <Card>
-          <TileRow
-            action={<Button variant="quiet">Watch</Button>}
-            description="A short welcome from your coach"
-            title="Your welcome video"
-          />
-        </Card>
-        <EmptyState
-          action={<Button variant="line">See past sessions</Button>}
-          title="Your next session is not booked yet"
-        >
-          When you are ready, choose a time with your coach.
-        </EmptyState>
+
+        <section className="client-loop-section" id="sessions">
+          <div className="client-loop-section__heading">
+            <div>
+              <div className="trv-eyebrow">Sessions</div>
+              <h2>Upcoming appointments</h2>
+            </div>
+          </div>
+          {upcoming.length === 0 ? (
+            <EmptyState title="No session is booked yet">
+              Choose one of your coach's proposed times below when it suits you.
+            </EmptyState>
+          ) : (
+            <Card>
+              {upcoming.map((appointment) => (
+                <TileRow
+                  action={
+                    <div className="client-row-actions">
+                      {appointment.meetingLink ? (
+                        <a
+                          className="trv-button trv-button--primary"
+                          href={appointment.meetingLink}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Join
+                        </a>
+                      ) : null}
+                      <a className="trv-button trv-button--line" href={appointment.calendarUrl}>
+                        Add to calendar
+                      </a>
+                    </div>
+                  }
+                  description={`${new Date(appointment.startsAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · ${appointment.target.name}`}
+                  key={appointment.id}
+                  title={appointment.title}
+                />
+              ))}
+            </Card>
+          )}
+        </section>
+
+        {home.relationships.map((relationship) => {
+          const appointmentType = relationship.appointmentTypes[0];
+          return (
+            <section className="client-loop-section" key={relationship.id}>
+              <div className="client-loop-section__heading">
+                <div>
+                  <div className="trv-eyebrow">{relationship.coach.practiceName}</div>
+                  <h2>Book with {relationship.coach.name}</h2>
+                </div>
+              </div>
+              {relationship.availableSlots.length === 0 || appointmentType === undefined ? (
+                <Card>
+                  <p className="client-muted">No proposed times are available right now.</p>
+                </Card>
+              ) : (
+                <Card>
+                  {relationship.availableSlots.map((slot) => (
+                    <TileRow
+                      action={
+                        <Button
+                          disabled={busy === slot.id}
+                          onClick={() => void book(relationship.id, slot.id, appointmentType.id)}
+                          type="button"
+                          variant="line"
+                        >
+                          {busy === slot.id ? 'Holding...' : 'Book this time'}
+                        </Button>
+                      }
+                      description={
+                        slot.endsAt === null
+                          ? relationship.coach.name
+                          : `Until ${new Date(slot.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                      }
+                      key={slot.id}
+                      title={
+                        slot.startsAt === null
+                          ? 'Proposed time'
+                          : new Date(slot.startsAt).toLocaleString([], {
+                              dateStyle: 'full',
+                              timeStyle: 'short',
+                            })
+                      }
+                    />
+                  ))}
+                </Card>
+              )}
+            </section>
+          );
+        })}
+
+        <section className="client-loop-section" id="tasks">
+          <div className="client-loop-section__heading">
+            <div>
+              <div className="trv-eyebrow">Accountability</div>
+              <h2>Your tasks</h2>
+            </div>
+            <Badge tone={openTasks.length > 0 ? 'mark' : 'neutral'}>{openTasks.length} open</Badge>
+          </div>
+          {home.tasks.length === 0 ? (
+            <Card>
+              <p className="client-muted">Nothing is assigned right now.</p>
+            </Card>
+          ) : (
+            <Card>
+              {home.tasks.map((task) => (
+                <TileRow
+                  action={
+                    task.status === 'assigned' ? (
+                      <Button
+                        disabled={busy === task.id}
+                        onClick={() => void completeTask(task.id)}
+                        type="button"
+                        variant="line"
+                      >
+                        {busy === task.id ? 'Completing...' : 'Mark complete'}
+                      </Button>
+                    ) : (
+                      <Badge tone={task.status === 'completed' ? 'accent' : 'neutral'}>
+                        {task.status === 'completed' ? 'Complete' : 'Canceled'}
+                      </Badge>
+                    )
+                  }
+                  description={
+                    task.description ??
+                    (task.dueAt
+                      ? `Due ${new Date(task.dueAt).toLocaleDateString()}`
+                      : task.clientName)
+                  }
+                  key={task.id}
+                  title={task.title}
+                />
+              ))}
+            </Card>
+          )}
+        </section>
       </div>
     </AppShell>
   );

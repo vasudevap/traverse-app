@@ -44,6 +44,15 @@ import {
 } from './coach-signup.service.js';
 import { FlowBWebhookController } from './flow-b-webhook.controller.js';
 import { HealthController } from './health.controller.js';
+import {
+  ClientCoachingLoopController,
+  CoachCoachingLoopController,
+} from './coaching-loop.controller.js';
+import {
+  COACHING_LOOP_STORE,
+  type CoachingLoopStore,
+  CoachingLoopService,
+} from './coaching-loop.service.js';
 
 /**
  * Modular monolith root (Decision D18). Domain modules (auth, tenancy, video,
@@ -67,6 +76,9 @@ export class AppModule {
     onboardingDependencies: {
       store: ClientOnboardingStore;
     },
+    coachingLoopDependencies: {
+      store: CoachingLoopStore;
+    },
   ): DynamicModule {
     return {
       module: AppModule,
@@ -77,6 +89,8 @@ export class AppModule {
         CoachClientOnboardingController,
         ClientInvitationController,
         ClientOnboardingController,
+        CoachCoachingLoopController,
+        ClientCoachingLoopController,
         FlowBWebhookController,
         HealthController,
       ],
@@ -90,10 +104,12 @@ export class AppModule {
         { provide: COACH_PROFILE_ASSET_STORE, useValue: setupDependencies.assets },
         { provide: COACH_SETUP_STORE, useValue: setupDependencies.store },
         { provide: CLIENT_ONBOARDING_STORE, useValue: onboardingDependencies.store },
+        { provide: COACHING_LOOP_STORE, useValue: coachingLoopDependencies.store },
         AuthService,
         CoachSetupService,
         CoachSignupService,
         ClientOnboardingService,
+        CoachingLoopService,
         AuthenticatedSessionGuard,
         ClientCsrfGuard,
         ClientSessionGuard,
