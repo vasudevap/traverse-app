@@ -111,6 +111,7 @@ module "compute" {
   task_role_arns         = module.account_baseline.task_role_arns
   secret_arns            = module.account_baseline.secret_arns
   kms_key_arn            = module.account_baseline.kms_key_arn
+  asset_bucket_name      = module.storage.summary.asset_bucket.name
   github_repository      = "vasudevap/traverse-app"
   github_oidc_subjects   = ["repo:vasudevap/traverse-app:environment:production"]
   log_retention_days     = 90
