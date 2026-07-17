@@ -1027,13 +1027,6 @@ async function up(database: Kysely<unknown>): Promise<void> {
 async function down(database: Kysely<unknown>): Promise<void> {
   await sql`SET LOCAL ROLE traverse_ddl`.execute(database);
   await sql`
-    ALTER TABLE app.coaching_relationships
-      DROP CONSTRAINT coaching_relationships_intake_form_fk,
-      DROP CONSTRAINT coaching_relationships_contract_template_fk,
-      DROP COLUMN intake_form_id,
-      DROP COLUMN contract_template_id,
-      DROP COLUMN gate_config;
-
     DROP TABLE app.imports;
     DROP TABLE app.exports;
     DROP TABLE app.event_log;
@@ -1048,6 +1041,14 @@ async function down(database: Kysely<unknown>): Promise<void> {
     DROP TABLE app.contract_signatures;
     DROP TABLE app.contract_instances;
     DROP TABLE app.client_invites;
+
+    ALTER TABLE app.coaching_relationships
+      DROP CONSTRAINT coaching_relationships_intake_form_fk,
+      DROP CONSTRAINT coaching_relationships_contract_template_fk,
+      DROP COLUMN intake_form_id,
+      DROP COLUMN contract_template_id,
+      DROP COLUMN gate_config;
+
     DROP TABLE app.intake_forms;
     DROP TABLE app.contract_templates;
     DROP TABLE app.legal_acceptances;
