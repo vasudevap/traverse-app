@@ -9,7 +9,7 @@ static_app_domain_names = {
   coach  = "staging-app.traversecoaching.com"
 }
 provision_static_app_certificate = true
-enable_static_app_aliases        = false
+enable_static_app_aliases        = true
 storage_asset_cors_allowed_origins = [
   "http://localhost:5173",
   "http://localhost:5174",
