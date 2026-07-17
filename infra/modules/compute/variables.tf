@@ -82,6 +82,11 @@ variable "kms_key_arn" {
   type        = string
 }
 
+variable "asset_bucket_name" {
+  description = "Private S3 bucket used for tenant-scoped profile and brand assets."
+  type        = string
+}
+
 variable "github_repository" {
   description = "GitHub repository allowed to deploy immutable images."
   type        = string

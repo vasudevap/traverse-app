@@ -79,6 +79,7 @@ export interface TenantTable extends AuditColumns {
   onboarding_defaults: Generated<JsonValue>;
   message_templates: Generated<JsonValue>;
   policy_defaults: Generated<JsonValue>;
+  setup_progress: Generated<JsonValue>;
 }
 
 export interface TenantKeyTable {

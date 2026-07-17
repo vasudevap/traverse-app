@@ -20,10 +20,15 @@ import {
   type SignupEmailSender,
   type TenantKeyGenerator,
 } from './coach-signup.service.js';
+import { S3CoachProfileAssetStore } from './coach-setup-assets.js';
+import { DatabaseCoachSetupStore } from './coach-setup-store.js';
+import type { CoachProfileAssetStore, CoachSetupStore } from './coach-setup.service.js';
 
 export interface AppDependencies {
   allowedOrigins: ReadonlySet<string>;
   authSessionStore: AuthSessionStore;
+  setupAssetStore?: CoachProfileAssetStore;
+  setupStore?: CoachSetupStore;
   signupBillingClient?: FlowBBillingClient;
   signupEmailSender?: SignupEmailSender;
   signupStore?: CoachSignupStore;
@@ -56,12 +61,34 @@ const missingSignupStore: CoachSignupStore = {
   updateSubscriptionFromWebhook: async () => missingSignupDependency('signupStore'),
 };
 
+const missingSetupStore: CoachSetupStore = {
+  get: async () => missingSignupDependency('setupStore'),
+  markOptionalSkipped: async () => missingSignupDependency('setupStore'),
+  markPreviewed: async () => missingSignupDependency('setupStore'),
+  saveCoachProfile: async () => missingSignupDependency('setupStore'),
+  saveOnboardingDefaults: async () => missingSignupDependency('setupStore'),
+  savePolicies: async () => missingSignupDependency('setupStore'),
+  savePracticeProfile: async () => missingSignupDependency('setupStore'),
+  saveProfilePhoto: async () => missingSignupDependency('setupStore'),
+};
+
+const missingSetupAssets: CoachProfileAssetStore = {
+  confirmUpload: async () => missingSignupDependency('setupAssetStore'),
+  createReadUrl: async () => missingSignupDependency('setupAssetStore'),
+  prepareUpload: async () => missingSignupDependency('setupAssetStore'),
+};
+
 function environmentDependencies(): AppDependencies {
   const database = createDatabase({
     connectionString: databaseConnectionString(process.env.DATABASE_SECRET),
     ssl: { rejectUnauthorized: true },
   });
   const appBaseUrl = process.env.COACH_APP_BASE_URL ?? 'https://app.traversecoaching.com';
+  const kmsKeyId = configuredKmsKeyId();
+  const assetBucket = process.env.ASSET_BUCKET_NAME;
+  if (assetBucket === undefined || assetBucket.trim() === '') {
+    throw new Error('ASSET_BUCKET_NAME is required.');
+  }
   return {
     allowedOrigins: configuredAllowedOrigins(
       process.env.AUTH_ALLOWED_ORIGINS,
@@ -75,7 +102,9 @@ function environmentDependencies(): AppDependencies {
       process.env.SIGNUP_EMAIL_FROM ?? 'Traverse <hello@traversecoaching.com>',
     ),
     signupStore: new DatabaseCoachSignupStore(database),
-    tenantKeyGenerator: new AwsTenantKeyGenerator(configuredKmsKeyId()),
+    setupAssetStore: new S3CoachProfileAssetStore({ bucket: assetBucket, kmsKeyId }),
+    setupStore: new DatabaseCoachSetupStore(database),
+    tenantKeyGenerator: new AwsTenantKeyGenerator(kmsKeyId),
   };
 }
 
@@ -103,6 +132,10 @@ export async function createApp(
         tenantKeyGenerator: resolvedDependencies.tenantKeyGenerator ?? {
           generate: async () => missingSignupDependency('tenantKeyGenerator'),
         },
+      },
+      {
+        assets: resolvedDependencies.setupAssetStore ?? missingSetupAssets,
+        store: resolvedDependencies.setupStore ?? missingSetupStore,
       },
     ),
     { rawBody: true, ...options },

@@ -5,6 +5,14 @@ import { AuthController } from './auth.controller.js';
 import { AuthenticatedSessionGuard, CoachSignupCsrfGuard, OriginCsrfGuard } from './auth.guards.js';
 import { AUTH_SESSION_STORE, AuthService } from './auth.service.js';
 import { CoachSignupController } from './coach-signup.controller.js';
+import { CoachSetupController } from './coach-setup.controller.js';
+import {
+  COACH_PROFILE_ASSET_STORE,
+  COACH_SETUP_STORE,
+  type CoachProfileAssetStore,
+  type CoachSetupStore,
+  CoachSetupService,
+} from './coach-setup.service.js';
 import {
   COACH_SIGNUP_STORE,
   CoachSignupService,
@@ -34,12 +42,17 @@ export class AppModule {
       store: CoachSignupStore;
       tenantKeyGenerator: TenantKeyGenerator;
     },
+    setupDependencies: {
+      assets: CoachProfileAssetStore;
+      store: CoachSetupStore;
+    },
   ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
         AuthController,
         CoachSignupController,
+        CoachSetupController,
         FlowBWebhookController,
         HealthController,
       ],
@@ -50,7 +63,10 @@ export class AppModule {
         { provide: FLOW_B_BILLING_CLIENT, useValue: signupDependencies.billingClient },
         { provide: SIGNUP_EMAIL_SENDER, useValue: signupDependencies.emailSender },
         { provide: TENANT_KEY_GENERATOR, useValue: signupDependencies.tenantKeyGenerator },
+        { provide: COACH_PROFILE_ASSET_STORE, useValue: setupDependencies.assets },
+        { provide: COACH_SETUP_STORE, useValue: setupDependencies.store },
         AuthService,
+        CoachSetupService,
         CoachSignupService,
         AuthenticatedSessionGuard,
         CoachSignupCsrfGuard,
