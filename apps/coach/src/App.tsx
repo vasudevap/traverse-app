@@ -1,13 +1,19 @@
 import {
   ApiResponseError,
+  type CoachContractSnapshot,
   type CoachSetupSnapshot,
+  createCoachContractApiClient,
+  createCoachInviteApiClient,
   createCoachSetupApiClient,
+  type InviteOptions,
   type SetupStep,
 } from '@traverse/api-client';
 import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@traverse/ui';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 const setupApi = createCoachSetupApiClient();
+const inviteApi = createCoachInviteApiClient();
+const contractApi = createCoachContractApiClient();
 const navigation = [
   { current: true, href: '#dashboard', label: 'Dashboard' },
   { href: '/clients', label: 'Clients' },
@@ -787,8 +793,380 @@ function LoadError({ error, onRetry }: { error: string; onRetry(): void }) {
   );
 }
 
+function CoachContractSignaturePage({ contractId }: { contractId: string }) {
+  const [contract, setContract] = useState<CoachContractSnapshot | null>(null);
+  const [signerName, setSignerName] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [completedState, setCompletedState] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      setContract(await contractApi.get(contractId));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, [contractId]);
+
+  async function sign() {
+    setBusy(true);
+    setError(null);
+    try {
+      const snapshot = await contractApi.sign(contractId, signerName);
+      setCompletedState(snapshot.state);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (contract === null) {
+    return (
+      <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+        <div className="invite-layout invite-layout--confirmation">
+          <Card className="invite-confirmation">
+            <div className="trv-eyebrow">Agreement countersignature</div>
+            {error ? (
+              <>
+                <h1>We could not open this agreement.</h1>
+                <p>{error}</p>
+                <Button onClick={() => void load()} type="button">
+                  Try again
+                </Button>
+              </>
+            ) : (
+              <p aria-busy="true">Opening the signed agreement...</p>
+            )}
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (completedState !== null || contract.coachSigned) {
+    return (
+      <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+        <div className="invite-layout invite-layout--confirmation">
+          <Card className="invite-confirmation">
+            <div className="dashboard-ready-card__mark" aria-hidden="true">
+              ✓
+            </div>
+            <div className="trv-eyebrow">Agreement countersigned</div>
+            <h1>{contract.clientName} can continue.</h1>
+            <p>
+              Both signatures are recorded with the immutable agreement snapshot. The next client
+              step is {completedState === 'active' ? 'their coaching space' : 'their intake'}.
+            </p>
+            <a className="trv-button trv-button--primary" href="/">
+              Return to dashboard
+            </a>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+      <PageHeader
+        eyebrow="Agreement countersignature"
+        summary={`${contract.clientName} has signed. Review the preserved agreement before adding your signature.`}
+        title={`Countersign for ${contract.clientName}`}
+      />
+      <div className="invite-layout">
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <Card className="coach-contract-card">
+          <Badge tone={contract.clientSigned ? 'accent' : 'neutral'}>
+            {contract.clientSigned ? 'Client signature recorded' : 'Waiting for client signature'}
+          </Badge>
+          <article className="coach-contract-document">
+            <h2>{contract.name}</h2>
+            <pre>{contract.body}</pre>
+          </article>
+          <div className="coach-contract-signature">
+            <Field label="Your full legal name">
+              <TextInput
+                autoComplete="name"
+                maxLength={160}
+                onChange={(event) => setSignerName(event.target.value)}
+                required
+                value={signerName}
+              />
+            </Field>
+            <label className="coach-contract-consent">
+              <input
+                checked={agreed}
+                onChange={(event) => setAgreed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>I have read and agree to this coaching agreement.</span>
+            </label>
+            <Button
+              disabled={busy || !contract.clientSigned || !agreed || signerName.trim() === ''}
+              onClick={() => void sign()}
+              type="button"
+            >
+              {busy ? 'Signing securely...' : 'Countersign agreement'}
+            </Button>
+          </div>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+
+function InviteClientPage() {
+  const [options, setOptions] = useState<InviteOptions | null>(null);
+  const [clientName, setClientName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [contractTemplateId, setContractTemplateId] = useState<string | null>(null);
+  const [intakeFormId, setIntakeFormId] = useState<string | null>(null);
+  const [contractRequired, setContractRequired] = useState(true);
+  const [countersignatureRequired, setCountersignatureRequired] = useState(false);
+  const [intakeRequired, setIntakeRequired] = useState(true);
+  const [expiryDays, setExpiryDays] = useState(14);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<{ email: string; expiresAt: string } | null>(null);
+
+  useEffect(() => {
+    void inviteApi
+      .options()
+      .then((loaded) => {
+        setOptions(loaded);
+        setContractRequired(loaded.defaults.contractRequired);
+        setCountersignatureRequired(loaded.defaults.countersignatureRequired);
+        setIntakeRequired(loaded.defaults.intakeRequired);
+        setExpiryDays(loaded.defaults.inviteExpiryDays);
+        setContractTemplateId(loaded.templates[0]?.id ?? null);
+        setIntakeFormId(loaded.forms[0]?.id ?? null);
+      })
+      .catch((caught) => setError(errorMessage(caught)));
+  }, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const invitation = await inviteApi.create({
+        clientName,
+        contractTemplateId: contractRequired ? contractTemplateId : null,
+        email,
+        gates: {
+          contractRequired,
+          countersignatureRequired: contractRequired && countersignatureRequired,
+          intakeRequired,
+          paymentRequired: false,
+        },
+        intakeFormId: intakeRequired ? intakeFormId : null,
+        inviteExpiryDays: expiryDays,
+        phone,
+      });
+      setSent({ email: invitation.email, expiresAt: invitation.expiresAt });
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sent !== null) {
+    return (
+      <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+        <div className="invite-layout invite-layout--confirmation">
+          <Card className="invite-confirmation">
+            <div className="dashboard-ready-card__mark" aria-hidden="true">
+              ✓
+            </div>
+            <div className="trv-eyebrow">Invitation sent</div>
+            <h1>Your client has a clear next step.</h1>
+            <p>
+              We sent a secure invitation to <strong>{sent.email}</strong>. It expires on{' '}
+              {new Date(sent.expiresAt).toLocaleDateString()}.
+            </p>
+            <div className="setup-actions">
+              <a className="trv-button trv-button--primary" href="#dashboard">
+                Return to dashboard
+              </a>
+              <Button onClick={() => setSent(null)} type="button" variant="line">
+                Invite another client
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+      <PageHeader
+        eyebrow="Client onboarding"
+        summary="Choose what this client needs, then Traverse guides them through each step."
+        title="Invite a client"
+      />
+      <div className="invite-layout">
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <form className="invite-form" onSubmit={(event) => void submit(event)}>
+          <Card>
+            <div className="trv-eyebrow">Client details</div>
+            <h2>Who are you welcoming?</h2>
+            <div className="setup-form__grid">
+              <Field label="Client name">
+                <TextInput
+                  autoComplete="name"
+                  maxLength={160}
+                  onChange={(event) => setClientName(event.target.value)}
+                  required
+                  value={clientName}
+                />
+              </Field>
+              <Field label="Email">
+                <TextInput
+                  autoComplete="email"
+                  maxLength={254}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </Field>
+              <Field hint="Optional" label="Phone">
+                <TextInput
+                  autoComplete="tel"
+                  maxLength={40}
+                  onChange={(event) => setPhone(event.target.value)}
+                  type="tel"
+                  value={phone}
+                />
+              </Field>
+              <Field label="Invitation expires after">
+                <select
+                  className="trv-input setup-select"
+                  onChange={(event) => setExpiryDays(Number(event.target.value))}
+                  value={expiryDays}
+                >
+                  <option value={7}>7 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={21}>21 days</option>
+                  <option value={30}>30 days</option>
+                </select>
+              </Field>
+            </div>
+          </Card>
+          <Card>
+            <div className="trv-eyebrow">Onboarding path</div>
+            <h2>What should happen before coaching begins?</h2>
+            <div className="invite-gates">
+              <label className="invite-gate-choice">
+                <input
+                  checked={contractRequired}
+                  onChange={(event) => setContractRequired(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Sign a coaching agreement</strong>
+                  <small>Creates an immutable copy for this relationship.</small>
+                </span>
+              </label>
+              {contractRequired ? (
+                <Field label="Agreement">
+                  <select
+                    className="trv-input setup-select"
+                    onChange={(event) => setContractTemplateId(event.target.value || null)}
+                    required
+                    value={contractTemplateId ?? ''}
+                  >
+                    <option disabled value="">
+                      Select an agreement
+                    </option>
+                    {options?.templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              <label className="invite-gate-choice">
+                <input
+                  checked={countersignatureRequired}
+                  disabled={!contractRequired}
+                  onChange={(event) => setCountersignatureRequired(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Require my countersignature</strong>
+                  <small>The client continues after both signatures are recorded.</small>
+                </span>
+              </label>
+              <label className="invite-gate-choice">
+                <input
+                  checked={intakeRequired}
+                  onChange={(event) => setIntakeRequired(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Complete an intake</strong>
+                  <small>Answers are encrypted before they are stored.</small>
+                </span>
+              </label>
+              {intakeRequired ? (
+                <Field label="Intake form">
+                  <select
+                    className="trv-input setup-select"
+                    onChange={(event) => setIntakeFormId(event.target.value || null)}
+                    required
+                    value={intakeFormId ?? ''}
+                  >
+                    {options?.forms.map((form) => (
+                      <option key={form.id} value={form.id}>
+                        {form.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+              <div className="invite-payment-note">
+                <Badge>Payment later</Badge>
+                Client payment does not block onboarding until Stripe Connect is available.
+              </div>
+            </div>
+          </Card>
+          <div className="setup-actions">
+            <Button disabled={busy || options === null} type="submit">
+              {busy ? 'Sending securely...' : 'Send secure invitation'}
+            </Button>
+            <a className="trv-button trv-button--line" href="#dashboard">
+              Cancel
+            </a>
+            <span className="setup-saved-note">The invitation link expires automatically</span>
+          </div>
+        </form>
+      </div>
+    </AppShell>
+  );
+}
+
 /** Authenticated owner setup flow for S3-S10. */
-export function App() {
+function CoachSetupApp() {
   const [snapshot, setSnapshot] = useState<CoachSetupSnapshot | null>(null);
   const [activeStep, setActiveStep] = useState<SetupStep>('practice');
   const [busy, setBusy] = useState(false);
@@ -938,4 +1316,12 @@ export function App() {
       {content}
     </SetupFrame>
   );
+}
+
+export function App() {
+  const contractMatch = window.location.pathname.match(/^\/contracts\/([^/]+)\/sign$/);
+  if (contractMatch?.[1] !== undefined) {
+    return <CoachContractSignaturePage contractId={decodeURIComponent(contractMatch[1])} />;
+  }
+  return window.location.pathname === '/clients/new' ? <InviteClientPage /> : <CoachSetupApp />;
 }

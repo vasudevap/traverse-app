@@ -2,10 +2,28 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import type { AuthSessionStore } from '@traverse/db';
 import { AUTH_CONFIG, type AuthConfig } from './auth-config.js';
 import { AuthController } from './auth.controller.js';
-import { AuthenticatedSessionGuard, CoachSignupCsrfGuard, OriginCsrfGuard } from './auth.guards.js';
+import {
+  AuthenticatedSessionGuard,
+  ClientCsrfGuard,
+  ClientSessionGuard,
+  CoachCsrfGuard,
+  CoachSessionGuard,
+  CoachSignupCsrfGuard,
+  OriginCsrfGuard,
+} from './auth.guards.js';
 import { AUTH_SESSION_STORE, AuthService } from './auth.service.js';
 import { CoachSignupController } from './coach-signup.controller.js';
 import { CoachSetupController } from './coach-setup.controller.js';
+import {
+  ClientInvitationController,
+  ClientOnboardingController,
+  CoachClientOnboardingController,
+} from './client-onboarding.controller.js';
+import {
+  CLIENT_ONBOARDING_STORE,
+  type ClientOnboardingStore,
+  ClientOnboardingService,
+} from './client-onboarding.service.js';
 import {
   COACH_PROFILE_ASSET_STORE,
   COACH_SETUP_STORE,
@@ -46,6 +64,9 @@ export class AppModule {
       assets: CoachProfileAssetStore;
       store: CoachSetupStore;
     },
+    onboardingDependencies: {
+      store: ClientOnboardingStore;
+    },
   ): DynamicModule {
     return {
       module: AppModule,
@@ -53,6 +74,9 @@ export class AppModule {
         AuthController,
         CoachSignupController,
         CoachSetupController,
+        CoachClientOnboardingController,
+        ClientInvitationController,
+        ClientOnboardingController,
         FlowBWebhookController,
         HealthController,
       ],
@@ -65,10 +89,16 @@ export class AppModule {
         { provide: TENANT_KEY_GENERATOR, useValue: signupDependencies.tenantKeyGenerator },
         { provide: COACH_PROFILE_ASSET_STORE, useValue: setupDependencies.assets },
         { provide: COACH_SETUP_STORE, useValue: setupDependencies.store },
+        { provide: CLIENT_ONBOARDING_STORE, useValue: onboardingDependencies.store },
         AuthService,
         CoachSetupService,
         CoachSignupService,
+        ClientOnboardingService,
         AuthenticatedSessionGuard,
+        ClientCsrfGuard,
+        ClientSessionGuard,
+        CoachCsrfGuard,
+        CoachSessionGuard,
         CoachSignupCsrfGuard,
         OriginCsrfGuard,
       ],

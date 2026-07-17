@@ -28,6 +28,112 @@ export interface SessionResponse {
   user: AuthUser;
 }
 
+export interface OnboardingGateConfig {
+  contractRequired: boolean;
+  countersignatureRequired: boolean;
+  intakeRequired: boolean;
+  paymentRequired: false;
+}
+
+export interface InviteOptions {
+  defaults: OnboardingGateConfig & {
+    inviteExpiryDays: number;
+    reminderCadenceDays: number[];
+  };
+  forms: Array<{ id: string; name: string; version: number }>;
+  templates: Array<{ id: string; name: string; version: number }>;
+}
+
+export interface InvitePreview {
+  clientName: string;
+  coachName: string;
+  expiresAt: string;
+  gates: OnboardingGateConfig;
+  inviteId: string;
+  practiceName: string;
+  welcomeMessage: string;
+}
+
+export interface OnboardingSnapshot {
+  coach: { name: string; practiceName: string };
+  contract: null | {
+    body: string;
+    clientSigned: boolean;
+    coachSigned: boolean;
+    id: string;
+    name: string;
+  };
+  gates: OnboardingGateConfig;
+  intake: null | {
+    fields: Array<{
+      id: string;
+      label: string;
+      required: boolean;
+      type: 'long_text' | 'short_text';
+    }>;
+    id: string;
+    name: string;
+    submitted: boolean;
+  };
+  relationshipId: string;
+  state: string;
+}
+
+export interface CoachContractSnapshot {
+  body: string;
+  clientName: string;
+  clientSigned: boolean;
+  coachSigned: boolean;
+  id: string;
+  name: string;
+  relationshipId: string;
+  state: string;
+}
+
+export interface CoachInviteApiClient {
+  create(input: {
+    clientName: string;
+    contractTemplateId: string | null;
+    email: string;
+    gates: OnboardingGateConfig;
+    intakeFormId: string | null;
+    inviteExpiryDays: number;
+    phone: string;
+  }): Promise<{
+    clientName: string;
+    email: string;
+    expiresAt: string;
+    id: string;
+    relationshipId: string;
+    status: 'invited';
+  }>;
+  options(): Promise<InviteOptions>;
+}
+
+export interface CoachContractApiClient {
+  get(contractId: string): Promise<CoachContractSnapshot>;
+  sign(contractId: string, signerName: string): Promise<OnboardingSnapshot>;
+}
+
+export interface ClientOnboardingApiClient {
+  accept(
+    token: string,
+    input: { mode: 'magic_link' | 'password'; password?: string },
+  ): Promise<{ csrfToken: string; relationshipId: string; snapshot: OnboardingSnapshot }>;
+  current(relationshipId: string): Promise<OnboardingSnapshot>;
+  decline(token: string): Promise<void>;
+  inspect(token: string): Promise<InvitePreview>;
+  signContract(
+    relationshipId: string,
+    contractId: string,
+    signerName: string,
+  ): Promise<OnboardingSnapshot>;
+  submitIntake(
+    relationshipId: string,
+    answers: Record<string, string>,
+  ): Promise<OnboardingSnapshot>;
+}
+
 export type SetupProgressStatus = 'complete' | 'pending' | 'skipped';
 export type SetupStep =
   | 'branding'
@@ -239,5 +345,118 @@ export function createAuthApiClient(
         throw new ApiResponseError(response.status);
       }
     },
+  };
+}
+
+async function csrfFor(
+  baseUrl: string,
+  surface: 'client' | 'coach',
+  request: typeof fetch,
+): Promise<string> {
+  const response = await request(`${baseUrl}/${surface}/auth/csrf`, {
+    credentials: 'include',
+  });
+  return (await responseJson<{ csrfToken: string }>(response)).csrfToken;
+}
+
+export function createCoachInviteApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): CoachInviteApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  return {
+    async options() {
+      const response = await request(`${normalizedBaseUrl}/coach/clients/invite-options`, {
+        credentials: 'include',
+      });
+      return responseJson<InviteOptions>(response);
+    },
+    async create(input) {
+      const csrf = await csrfFor(normalizedBaseUrl, 'coach', request);
+      const response = await request(`${normalizedBaseUrl}/coach/clients/invite`, {
+        body: JSON.stringify(input),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+        method: 'POST',
+      });
+      return responseJson(response);
+    },
+  };
+}
+
+export function createCoachContractApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): CoachContractApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  return {
+    async get(contractId) {
+      const response = await request(
+        `${normalizedBaseUrl}/coach/contracts/${encodeURIComponent(contractId)}`,
+        { credentials: 'include' },
+      );
+      return responseJson<CoachContractSnapshot>(response);
+    },
+    async sign(contractId, signerName) {
+      const csrf = await csrfFor(normalizedBaseUrl, 'coach', request);
+      const response = await request(
+        `${normalizedBaseUrl}/coach/contracts/${encodeURIComponent(contractId)}/sign`,
+        {
+          body: JSON.stringify({ agreed: true, signerName }),
+          credentials: 'include',
+          headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+          method: 'POST',
+        },
+      );
+      return responseJson<OnboardingSnapshot>(response);
+    },
+  };
+}
+
+export function createClientOnboardingApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): ClientOnboardingApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  async function mutate<T>(path: string, body?: unknown): Promise<T> {
+    const csrf = await csrfFor(normalizedBaseUrl, 'client', request);
+    const response = await request(`${normalizedBaseUrl}${path}`, {
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include',
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'x-csrf-token': csrf,
+      },
+      method: 'POST',
+    });
+    return responseJson<T>(response);
+  }
+  return {
+    accept: (token, input) =>
+      mutate(`/client/invitations/${encodeURIComponent(token)}/accept`, input),
+    async current(relationshipId) {
+      const response = await request(
+        `${normalizedBaseUrl}/client/onboarding/${encodeURIComponent(relationshipId)}`,
+        { credentials: 'include' },
+      );
+      return responseJson<OnboardingSnapshot>(response);
+    },
+    async decline(token) {
+      await mutate(`/client/invitations/${encodeURIComponent(token)}/decline`);
+    },
+    async inspect(token) {
+      const response = await request(
+        `${normalizedBaseUrl}/client/invitations/${encodeURIComponent(token)}`,
+        { credentials: 'include' },
+      );
+      return responseJson<InvitePreview>(response);
+    },
+    signContract: (relationshipId, contractId, signerName) =>
+      mutate(
+        `/client/onboarding/${encodeURIComponent(relationshipId)}/contracts/${encodeURIComponent(contractId)}/sign`,
+        { agreed: true, signerName },
+      ),
+    submitIntake: (relationshipId, answers) =>
+      mutate(`/client/onboarding/${encodeURIComponent(relationshipId)}/intake`, { answers }),
   };
 }

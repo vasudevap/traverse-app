@@ -6,3 +6,230 @@
   margin: 0 auto;
   max-width: 680px;
 }
+
+.onboarding-page {
+  min-height: 100vh;
+  padding: clamp(20px, 5vw, 52px);
+  background: var(--trv-surface);
+}
+
+.onboarding-page > .trv-wordmark,
+.onboarding-header,
+.onboarding-progress,
+.onboarding-step {
+  width: min(760px, 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.onboarding-page > .trv-wordmark {
+  display: block;
+  margin-bottom: 36px;
+}
+
+.onboarding-welcome {
+  width: min(680px, 100%);
+  margin: 0 auto;
+  padding: clamp(26px, 6vw, 54px);
+}
+
+.onboarding-welcome h1,
+.onboarding-step h1 {
+  margin: 8px 0 14px;
+  font-size: clamp(32px, 7vw, 48px);
+  line-height: 1.08;
+}
+
+.onboarding-lede {
+  color: var(--trv-text-secondary);
+  font-size: 17px;
+}
+
+.onboarding-practice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0;
+  margin: 24px 0;
+  border-top: 1px solid var(--trv-line);
+  border-bottom: 1px solid var(--trv-line);
+}
+
+.onboarding-practice > span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--trv-accent);
+  color: white;
+  font-weight: 700;
+}
+
+.onboarding-practice strong,
+.onboarding-practice small,
+.onboarding-choice strong,
+.onboarding-choice small {
+  display: block;
+}
+
+.onboarding-practice small,
+.onboarding-choice small,
+.onboarding-expiry {
+  color: var(--trv-text-secondary);
+}
+
+.onboarding-choice {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.onboarding-choice label {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-panel);
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.onboarding-expiry {
+  display: block;
+  margin-top: 18px;
+}
+
+.onboarding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+  color: var(--trv-text-secondary);
+}
+
+.onboarding-progress {
+  margin-bottom: 18px;
+}
+
+.onboarding-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: var(--trv-text-secondary);
+  font-size: 13px;
+}
+
+.onboarding-progress__bar {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--trv-line);
+}
+
+.onboarding-progress__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--trv-accent);
+  transition: width 220ms ease;
+}
+
+.onboarding-step .trv-card {
+  padding: clamp(24px, 6vw, 48px);
+}
+
+.contract-document {
+  max-height: 430px;
+  padding: 22px;
+  margin: 26px 0;
+  overflow: auto;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: white;
+}
+
+.contract-document pre {
+  margin: 0;
+  color: var(--trv-text-secondary);
+  font: inherit;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.signature-form,
+.intake-form {
+  display: grid;
+  gap: 18px;
+}
+
+.signature-consent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.intake-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.onboarding-complete,
+.onboarding-waiting,
+.onboarding-state {
+  text-align: center;
+}
+
+.onboarding-complete__mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: var(--trv-accent);
+  color: white;
+  font-size: 26px;
+}
+
+.onboarding-state {
+  display: grid;
+  place-content: center;
+  gap: 24px;
+}
+
+.onboarding-state .trv-card {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.onboarding-error {
+  margin-bottom: 16px;
+  color: var(--trv-danger);
+}
+
+@media (max-width: 620px) {
+  .onboarding-page {
+    padding: 20px 16px 36px;
+  }
+
+  .onboarding-actions,
+  .onboarding-actions .trv-button,
+  .signature-form .trv-button,
+  .intake-form .trv-button {
+    width: 100%;
+  }
+
+  .onboarding-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

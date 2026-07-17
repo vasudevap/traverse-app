@@ -1,4 +1,5 @@
 import type { NestApplicationOptions } from '@nestjs/common';
+import { KMSClient } from '@aws-sdk/client-kms';
 import { NestFactory } from '@nestjs/core';
 import {
   createDatabase,
@@ -6,6 +7,10 @@ import {
   DatabaseAuthSessionStore,
   type AuthSessionStore,
 } from '@traverse/db';
+import {
+  createJobBoss,
+  databaseConnectionString as jobDatabaseConnectionString,
+} from '@traverse/jobs';
 import { AppModule } from './app.module.js';
 import { configuredAllowedOrigins } from './auth-config.js';
 import {
@@ -23,10 +28,16 @@ import {
 import { S3CoachProfileAssetStore } from './coach-setup-assets.js';
 import { DatabaseCoachSetupStore } from './coach-setup-store.js';
 import type { CoachProfileAssetStore, CoachSetupStore } from './coach-setup.service.js';
+import {
+  DatabaseClientOnboardingStore,
+  KmsIntakeAnswerEncryptor,
+} from './client-onboarding-store.js';
+import type { ClientOnboardingStore } from './client-onboarding.service.js';
 
 export interface AppDependencies {
   allowedOrigins: ReadonlySet<string>;
   authSessionStore: AuthSessionStore;
+  clientOnboardingStore?: ClientOnboardingStore;
   setupAssetStore?: CoachProfileAssetStore;
   setupStore?: CoachSetupStore;
   signupBillingClient?: FlowBBillingClient;
@@ -78,23 +89,54 @@ const missingSetupAssets: CoachProfileAssetStore = {
   prepareUpload: async () => missingSignupDependency('setupAssetStore'),
 };
 
-function environmentDependencies(): AppDependencies {
+const missingClientOnboardingStore: ClientOnboardingStore = {
+  acceptInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  countersignContract: async () => missingSignupDependency('clientOnboardingStore'),
+  createInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  declineInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  getCoachContract: async () => missingSignupDependency('clientOnboardingStore'),
+  getInviteOptions: async () => missingSignupDependency('clientOnboardingStore'),
+  getOnboarding: async () => missingSignupDependency('clientOnboardingStore'),
+  inspectInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  resendInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  revokeInvite: async () => missingSignupDependency('clientOnboardingStore'),
+  signContract: async () => missingSignupDependency('clientOnboardingStore'),
+  submitIntake: async () => missingSignupDependency('clientOnboardingStore'),
+};
+
+async function environmentDependencies(): Promise<AppDependencies> {
   const database = createDatabase({
     connectionString: databaseConnectionString(process.env.DATABASE_SECRET),
     ssl: { rejectUnauthorized: true },
   });
   const appBaseUrl = process.env.COACH_APP_BASE_URL ?? 'https://app.traversecoaching.com';
+  const clientAppBaseUrl = process.env.CLIENT_APP_BASE_URL ?? 'https://client.traversecoaching.com';
   const kmsKeyId = configuredKmsKeyId();
   const assetBucket = process.env.ASSET_BUCKET_NAME;
   if (assetBucket === undefined || assetBucket.trim() === '') {
     throw new Error('ASSET_BUCKET_NAME is required.');
   }
+  const boss = createJobBoss({
+    connectionString: jobDatabaseConnectionString(process.env.DATABASE_SECRET),
+    ssl: { rejectUnauthorized: true },
+  });
+  await boss.start();
   return {
     allowedOrigins: configuredAllowedOrigins(
       process.env.AUTH_ALLOWED_ORIGINS,
       process.env.DEPLOYMENT_ENVIRONMENT,
     ),
     authSessionStore: new DatabaseAuthSessionStore(database),
+    clientOnboardingStore: new DatabaseClientOnboardingStore(
+      database,
+      boss,
+      new KmsIntakeAnswerEncryptor(new KMSClient({})),
+      {
+        clientAppBaseUrl,
+        coachAppBaseUrl: appBaseUrl,
+        emailFrom: process.env.CLIENT_EMAIL_FROM ?? 'Traverse <no-reply@mail.traversecoaching.com>',
+      },
+    ),
     signupBillingClient: new StripeFlowBBillingClient(process.env.STRIPE_SECRET),
     signupEmailSender: new ResendSignupEmailSender(
       process.env.RESEND_SECRET,
@@ -113,7 +155,7 @@ export async function createApp(
   options: NestApplicationOptions = {},
   dependencies?: AppDependencies,
 ) {
-  const resolvedDependencies = dependencies ?? environmentDependencies();
+  const resolvedDependencies = dependencies ?? (await environmentDependencies());
   const app = await NestFactory.create(
     AppModule.register(
       resolvedDependencies.authSessionStore,
@@ -136,6 +178,9 @@ export async function createApp(
       {
         assets: resolvedDependencies.setupAssetStore ?? missingSetupAssets,
         store: resolvedDependencies.setupStore ?? missingSetupStore,
+      },
+      {
+        store: resolvedDependencies.clientOnboardingStore ?? missingClientOnboardingStore,
       },
     ),
     { rawBody: true, ...options },

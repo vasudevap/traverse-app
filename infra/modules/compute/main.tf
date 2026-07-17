@@ -190,6 +190,7 @@ resource "aws_ecs_task_definition" "service" {
       { name = "APP_KMS_KEY_ID", value = var.kms_key_arn },
       { name = "ASSET_BUCKET_NAME", value = var.asset_bucket_name },
       { name = "COACH_APP_BASE_URL", value = var.environment == "nonprod" ? "https://staging-app.traversecoaching.com" : "https://app.traversecoaching.com" },
+      { name = "CLIENT_APP_BASE_URL", value = var.environment == "nonprod" ? "https://staging-client.traversecoaching.com" : "https://client.traversecoaching.com" },
       { name = "${upper(replace(each.key, "-", "_"))}_HEALTH_PORT", value = tostring(each.value.health_port) },
     ]
     portMappings = each.key == "api" ? [{

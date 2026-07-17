@@ -473,6 +473,152 @@ if (databaseUrl === undefined || databaseUrl === '') {
     });
   });
 
+  test('TRA-40 resolves only valid invite tokens and scopes multi-practice client relationships', async () => {
+    const rawToken = 'tra-40-secure-invitation-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest();
+    const inviteId = await withRuntimeContext(
+      ownerContext(),
+      async (client) => {
+        const inserted = await client.query<{ id: string }>(
+          `
+            INSERT INTO app.client_invites
+              (
+                tenant_id, coach_id, client_name, email, token_hash, gate_config,
+                contract_template_id, intake_form_id, relationship_id
+              )
+            VALUES (
+              $1, $2, 'Client A', 'tra-40-client@example.test', $3,
+              '{"contractRequired":true,"countersignatureRequired":false,"intakeRequired":true,"paymentRequired":false}'::jsonb,
+              $4, $5, $6
+            )
+            RETURNING id
+          `,
+          [tenantA, ownerCoachA, tokenHash, contractTemplateA, intakeFormA, relationshipAOwner],
+        );
+        return inserted.rows[0]?.id ?? '';
+      },
+      true,
+    );
+
+    await withRuntimeContext({}, async (client) => {
+      await client.query(
+        `
+          SELECT
+            set_config('app.invite_token_hash', $1, true),
+            set_config('app.actor_id', $2, true),
+            set_config('app.role', 'client', true),
+            set_config('app.client_id', $3, true)
+        `,
+        [tokenHash.toString('hex'), clientUserA, clientA],
+      );
+      const resolved = await client.query<{
+        client_id: string;
+        invite_id: string;
+        relationship_id: string;
+        tenant_id: string;
+        user_id: string;
+      }>('SELECT * FROM app.resolve_client_invite($1)', [tokenHash]);
+      assert.deepEqual(resolved.rows, [
+        {
+          invite_id: inviteId,
+          relationship_id: relationshipAOwner,
+          tenant_id: tenantA,
+        },
+      ]);
+
+      const wrongToken = await client.query('SELECT * FROM app.resolve_client_invite($1)', [
+        createHash('sha256').update('wrong-token').digest(),
+      ]);
+      assert.equal(wrongToken.rowCount, 0);
+
+      const tenant = await client.query<{ tenant_id: string | null }>(
+        'SELECT app.client_relationship_tenant($1, $2) AS tenant_id',
+        [relationshipAOwner, clientA],
+      );
+      assert.equal(tenant.rows[0]?.tenant_id, tenantA);
+      const crossClient = await client.query<{ tenant_id: string | null }>(
+        'SELECT app.client_relationship_tenant($1, $2) AS tenant_id',
+        [relationshipAOwner, clientB],
+      );
+      assert.equal(crossClient.rows[0]?.tenant_id, null);
+    });
+
+    const terminalConflict = await withRuntimeContext(ownerContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            UPDATE app.client_invites
+            SET accepted_at = now(), declined_at = now()
+            WHERE id = $1
+          `,
+          [inviteId],
+        ),
+      ),
+    );
+    assert.equal(terminalConflict, '23514');
+  });
+
+  test('TRA-40 client relationship updates require matching onboarding evidence', async () => {
+    const skippedGateState = await withRuntimeContext(clientContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            UPDATE app.coaching_relationships
+            SET onboarding_state = 'active', status = 'active'
+            WHERE id = $1
+          `,
+          [relationshipAOwner],
+        ),
+      ),
+    );
+    assert.equal(skippedGateState, '42501');
+
+    const rewriteState = await withRuntimeContext(clientContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            UPDATE app.coaching_relationships
+            SET gate_config = '{"contractRequired":false,"intakeRequired":false}'::jsonb
+            WHERE id = $1
+          `,
+          [relationshipAOwner],
+        ),
+      ),
+    );
+    assert.equal(rewriteState, '42501');
+  });
+
+  test('TRA-40 archived invitation relationships permit recovery invitations', async () => {
+    await withRuntimeContext(ownerContext(), async (client) => {
+      const first = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.coaching_relationships
+            (tenant_id, coach_id, client_id, status, onboarding_state)
+          VALUES ($1, $2, $3, 'invited', 'invited')
+          RETURNING id
+        `,
+        [tenantA, ownerCoachA, clientA2],
+      );
+      await client.query(
+        `
+          UPDATE app.coaching_relationships
+          SET archived_at = now(), status = 'revoked', onboarding_state = 'revoked'
+          WHERE id = $1
+        `,
+        [first.rows[0]?.id],
+      );
+      const replacement = await client.query(
+        `
+          INSERT INTO app.coaching_relationships
+            (tenant_id, coach_id, client_id, status, onboarding_state)
+          VALUES ($1, $2, $3, 'invited', 'invited')
+        `,
+        [tenantA, ownerCoachA, clientA2],
+      );
+      assert.equal(replacement.rowCount, 1);
+    });
+  });
+
   test('G4 blocks cross-tenant relationship reads, updates, and inserts', async () => {
     await withRuntimeContext(regularCoachContext(), async (client) => {
       const visible = await client.query<{ id: string }>(

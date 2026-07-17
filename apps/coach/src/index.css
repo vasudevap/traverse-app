@@ -663,3 +663,121 @@
     grid-column: 2;
   }
 }
+
+.invite-layout {
+  display: grid;
+  gap: 18px;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.invite-layout--confirmation {
+  min-height: 60vh;
+  place-items: center;
+}
+
+.invite-form {
+  display: grid;
+  gap: 20px;
+}
+
+.invite-form .trv-card h2,
+.invite-confirmation h1 {
+  margin: 8px 0 22px;
+}
+
+.invite-gates {
+  display: grid;
+  gap: 16px;
+}
+
+.invite-gates > .invite-gate-choice {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+}
+
+.invite-gates strong,
+.invite-gates small {
+  display: block;
+}
+
+.invite-gates small,
+.invite-payment-note {
+  color: var(--trv-text-secondary);
+}
+
+.invite-payment-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-panel);
+  font-size: 14px;
+}
+
+.invite-confirmation {
+  max-width: 620px;
+  text-align: center;
+}
+
+.invite-confirmation .dashboard-ready-card__mark {
+  margin: 0 auto 20px;
+}
+
+.invite-confirmation .setup-actions {
+  justify-content: center;
+}
+
+.coach-contract-card {
+  display: grid;
+  gap: 24px;
+}
+
+.coach-contract-card > .trv-badge {
+  justify-self: start;
+}
+
+.coach-contract-document {
+  padding: clamp(22px, 5vw, 40px);
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface-editorial);
+}
+
+.coach-contract-document h2 {
+  margin: 0 0 18px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 26px;
+}
+
+.coach-contract-document pre {
+  margin: 0;
+  color: var(--trv-text-secondary);
+  font-family: inherit;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.coach-contract-signature {
+  display: grid;
+  gap: 18px;
+  max-width: 560px;
+}
+
+.coach-contract-consent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  color: var(--trv-text-secondary);
+}
+
+.coach-contract-consent input {
+  margin-top: 4px;
+}

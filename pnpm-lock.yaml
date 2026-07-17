@@ -136,6 +136,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@traverse/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@traverse/ui':
         specifier: workspace:*
         version: link:../../packages/ui

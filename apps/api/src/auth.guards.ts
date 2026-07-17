@@ -74,6 +74,46 @@ export class AuthenticatedSessionGuard implements CanActivate {
   }
 }
 
+async function authenticateForRole(
+  request: AuthenticatedRequest,
+  authService: AuthService,
+  role: AuthRole,
+): Promise<boolean> {
+  const token = parseCookies(headerValue(request.headers.cookie)).get(SESSION_COOKIE_NAMES[role]);
+  if (token === undefined) {
+    throw new UnauthorizedException('Authentication required.');
+  }
+  request.authSession = await authService.authenticate(token, role);
+  request.sessionToken = token;
+  return true;
+}
+
+@Injectable()
+export class CoachSessionGuard implements CanActivate {
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+
+  canActivate(context: ExecutionContext): Promise<boolean> {
+    return authenticateForRole(
+      context.switchToHttp().getRequest<AuthenticatedRequest>(),
+      this.authService,
+      'coach',
+    );
+  }
+}
+
+@Injectable()
+export class ClientSessionGuard implements CanActivate {
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+
+  canActivate(context: ExecutionContext): Promise<boolean> {
+    return authenticateForRole(
+      context.switchToHttp().getRequest<AuthenticatedRequest>(),
+      this.authService,
+      'client',
+    );
+  }
+}
+
 @Injectable()
 export class OriginCsrfGuard implements CanActivate {
   constructor(@Inject(AUTH_CONFIG) private readonly config: AuthConfig) {}
@@ -81,6 +121,32 @@ export class OriginCsrfGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     return assertOriginCsrf(request, this.config, requestRole(request));
+  }
+}
+
+@Injectable()
+export class CoachCsrfGuard implements CanActivate {
+  constructor(@Inject(AUTH_CONFIG) private readonly config: AuthConfig) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    return assertOriginCsrf(
+      context.switchToHttp().getRequest<AuthenticatedRequest>(),
+      this.config,
+      'coach',
+    );
+  }
+}
+
+@Injectable()
+export class ClientCsrfGuard implements CanActivate {
+  constructor(@Inject(AUTH_CONFIG) private readonly config: AuthConfig) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    return assertOriginCsrf(
+      context.switchToHttp().getRequest<AuthenticatedRequest>(),
+      this.config,
+      'client',
+    );
   }
 }
 

@@ -6,6 +6,7 @@ set -Eeuo pipefail
 : "${ECS_CLUSTER:?ECS_CLUSTER is required}"
 : "${ECR_REGISTRY:?ECR_REGISTRY is required}"
 : "${IMAGE_DIGEST:?IMAGE_DIGEST is required}"
+: "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}"
 
 STABILITY_OBSERVATION_SECONDS="${STABILITY_OBSERVATION_SECONDS:-130}"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -14,6 +15,14 @@ register_deployment_revision() {
   local family="$1"
   local image="$2"
   local source_file registered_file task_definition_arn
+  local asset_bucket_name="traverse-assets-${DEPLOYMENT_ENVIRONMENT}-${AWS_ACCOUNT_ID}"
+  local coach_app_base_url="https://app.traversecoaching.com"
+  local client_app_base_url="https://client.traversecoaching.com"
+
+  if [[ "$DEPLOYMENT_ENVIRONMENT" == "nonprod" ]]; then
+    coach_app_base_url="https://staging-app.traversecoaching.com"
+    client_app_base_url="https://staging-client.traversecoaching.com"
+  fi
 
   source_file=$(mktemp)
   registered_file=$(mktemp)
@@ -27,6 +36,9 @@ register_deployment_revision() {
   jq \
     --arg image "$image" \
     --arg deployment_environment "$DEPLOYMENT_ENVIRONMENT" \
+    --arg asset_bucket_name "$asset_bucket_name" \
+    --arg coach_app_base_url "$coach_app_base_url" \
+    --arg client_app_base_url "$client_app_base_url" \
     -f "$SCRIPT_DIR/ecs-deployment-revision.jq" \
     "$source_file" >"$registered_file"
 
