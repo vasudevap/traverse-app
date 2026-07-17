@@ -13,6 +13,7 @@ import { stage2CoreDomainMigration } from './migrations/004-stage2-core-domain.j
 import { coachSignupFlowBMigration } from './migrations/005-coach-signup-flow-b.js';
 import { coachSetupMigration } from './migrations/006-coach-setup.js';
 import { clientOnboardingMigration } from './migrations/007-client-onboarding.js';
+import { coachingLoopMigration } from './migrations/008-coaching-loop.js';
 
 export const MIGRATION_NAME = '20260714_001_core_tenant_model';
 export const PGBOSS_ACCESS_MIGRATION_NAME = '20260715_002_pgboss_access';
@@ -21,6 +22,7 @@ export const STAGE2_CORE_DOMAIN_MIGRATION_NAME = '20260717_004_stage2_core_domai
 export const COACH_SIGNUP_FLOW_B_MIGRATION_NAME = '20260717_005_coach_signup_flow_b';
 export const COACH_SETUP_MIGRATION_NAME = '20260717_006_coach_setup';
 export const CLIENT_ONBOARDING_MIGRATION_NAME = '20260717_007_client_onboarding';
+export const COACHING_LOOP_MIGRATION_NAME = '20260717_008_coaching_loop';
 export const CORE_TENANT_TABLES = [
   'appointment_types',
   'appointments',
@@ -55,6 +57,7 @@ const provider: MigrationProvider = {
       [COACH_SIGNUP_FLOW_B_MIGRATION_NAME]: coachSignupFlowBMigration,
       [COACH_SETUP_MIGRATION_NAME]: coachSetupMigration,
       [CLIENT_ONBOARDING_MIGRATION_NAME]: clientOnboardingMigration,
+      [COACHING_LOOP_MIGRATION_NAME]: coachingLoopMigration,
     };
   },
 };

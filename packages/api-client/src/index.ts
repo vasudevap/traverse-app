@@ -90,6 +90,190 @@ export interface CoachContractSnapshot {
   state: string;
 }
 
+export interface LoopAppointment {
+  appointmentTypeId: string | null;
+  bookedByClient: boolean;
+  calendarUrl: string;
+  endsAt: string;
+  id: string;
+  meetingLink: string | null;
+  notes: string | null;
+  startsAt: string;
+  status: 'booked' | 'canceled' | 'completed' | 'scheduled';
+  target: { id: string; name: string; type: 'client' | 'group' };
+  timezone: string;
+  title: string;
+}
+
+export interface LoopTask {
+  clientName: string;
+  completedAt: string | null;
+  description: string | null;
+  dueAt: string | null;
+  id: string;
+  relationshipId: string;
+  status: 'assigned' | 'canceled' | 'completed';
+  title: string;
+}
+
+export interface LoopAppointmentType {
+  active: boolean;
+  currency: string | null;
+  defaultDurationMinutes: number;
+  id: string;
+  name: string;
+  notes: string | null;
+  priceAmount: number | null;
+  selfBookable: boolean;
+}
+
+export interface LoopAvailability {
+  active: boolean;
+  endsAt: string | null;
+  id: string;
+  localEndsAt: string | null;
+  localStartsAt: string | null;
+  startsAt: string | null;
+  timezone: string;
+  type: 'slot' | 'weekly';
+  weekday: number | null;
+}
+
+export interface LoopGroup {
+  archivedAt: string | null;
+  description: string | null;
+  id: string;
+  members: Array<{ clientId: string; name: string }>;
+  name: string;
+}
+
+export interface CoachLoopDashboard {
+  appointmentTypes: LoopAppointmentType[];
+  coachName: string;
+  groups: LoopGroup[];
+  relationships: Array<{
+    client: { email: string; id: string; name: string };
+    health:
+      | 'active'
+      | 'awaiting_first_touch'
+      | 'inactive_risk'
+      | 'newly_active'
+      | 'scheduled'
+      | 'task_pending';
+    id: string;
+    lastActivityAt: string;
+    nextAppointment: LoopAppointment | null;
+    openTaskCount: number;
+  }>;
+  timezone: string;
+  upcomingAppointments: LoopAppointment[];
+}
+
+export interface CoachLoopWorkspace {
+  appointments: LoopAppointment[];
+  client: { email: string; id: string; name: string; phone: string | null };
+  health: CoachLoopDashboard['relationships'][number]['health'];
+  id: string;
+  notes: string;
+  tasks: LoopTask[];
+}
+
+export interface ClientLoopHome {
+  appointments: LoopAppointment[];
+  nextAction:
+    | { appointmentId: string; kind: 'appointment'; startsAt: string; title: string }
+    | { kind: 'task'; taskId: string; title: string }
+    | { kind: 'waiting'; message: string };
+  relationships: Array<{
+    appointmentTypes: LoopAppointmentType[];
+    availableSlots: LoopAvailability[];
+    coach: { name: string; practiceName: string };
+    id: string;
+  }>;
+  tasks: LoopTask[];
+}
+
+export interface CoachLoopApiClient {
+  addGroupMember(groupId: string, clientId: string): Promise<LoopGroup>;
+  createAppointment(input: {
+    appointmentTypeId: string | null;
+    endsAt: string;
+    groupId: string | null;
+    meetingLink: string;
+    notes: string;
+    relationshipId: string | null;
+    startsAt: string;
+    timezone: string;
+    title: string;
+  }): Promise<LoopAppointment>;
+  createAppointmentType(input: {
+    currency: string | null;
+    defaultDurationMinutes: number;
+    name: string;
+    notes: string;
+    priceAmount: number | null;
+    selfBookable: boolean;
+  }): Promise<LoopAppointmentType>;
+  createAvailability(input: {
+    endsAt: string;
+    startsAt: string;
+    timezone: string;
+    type: 'slot';
+  }): Promise<LoopAvailability>;
+  createGroup(input: { description: string; name: string }): Promise<LoopGroup>;
+  createTask(input: {
+    description: string;
+    dueAt: string | null;
+    relationshipId: string;
+    title: string;
+  }): Promise<LoopTask>;
+  current(): Promise<CoachLoopDashboard>;
+  listAvailability(): Promise<LoopAvailability[]>;
+  removeAvailability(availabilityId: string): Promise<void>;
+  removeGroupMember(groupId: string, clientId: string): Promise<LoopGroup>;
+  saveNotes(relationshipId: string, notes: string): Promise<CoachLoopWorkspace>;
+  updateAppointment(
+    appointmentId: string,
+    input:
+      | { action: 'cancel' | 'complete' }
+      | {
+          action: 'reschedule';
+          endsAt: string;
+          meetingLink: string;
+          notes: string;
+          startsAt: string;
+          timezone: string;
+        },
+  ): Promise<LoopAppointment>;
+  updateAppointmentType(
+    appointmentTypeId: string,
+    input: Partial<Omit<LoopAppointmentType, 'id'>>,
+  ): Promise<LoopAppointmentType>;
+  updateGroup(
+    groupId: string,
+    input: { archived: boolean; description: string; name: string },
+  ): Promise<LoopGroup>;
+  updateTask(taskId: string, action: 'cancel' | 'reopen'): Promise<LoopTask>;
+  workspace(relationshipId: string): Promise<CoachLoopWorkspace>;
+}
+
+export interface ClientLoopApiClient {
+  completeTask(taskId: string): Promise<LoopTask>;
+  confirmBooking(
+    holdId: string,
+    input: { appointmentTypeId: string; relationshipId: string },
+  ): Promise<LoopAppointment>;
+  createHold(input: { availabilityId: string; relationshipId: string }): Promise<{
+    endsAt: string;
+    expiresAt: string;
+    id: string;
+    relationshipId: string;
+    startsAt: string;
+  }>;
+  current(): Promise<ClientLoopHome>;
+  releaseHold(holdId: string): Promise<void>;
+}
+
 export interface CoachInviteApiClient {
   create(input: {
     clientName: string;
@@ -458,5 +642,102 @@ export function createClientOnboardingApiClient(
       ),
     submitIntake: (relationshipId, answers) =>
       mutate(`/client/onboarding/${encodeURIComponent(relationshipId)}/intake`, { answers }),
+  };
+}
+
+export function createCoachLoopApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): CoachLoopApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  async function read<T>(path: string): Promise<T> {
+    const response = await request(`${normalizedBaseUrl}/coach${path}`, { credentials: 'include' });
+    return responseJson<T>(response);
+  }
+  async function mutate<T>(
+    path: string,
+    method: 'DELETE' | 'PATCH' | 'POST',
+    body?: unknown,
+  ): Promise<T> {
+    const csrf = await csrfFor(normalizedBaseUrl, 'coach', request);
+    const response = await request(`${normalizedBaseUrl}/coach${path}`, {
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include',
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'x-csrf-token': csrf,
+      },
+      method,
+    });
+    return responseJson<T>(response);
+  }
+  return {
+    addGroupMember: (groupId, clientId) =>
+      mutate(
+        `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(clientId)}`,
+        'POST',
+      ),
+    createAppointment: (input) => mutate('/appointments', 'POST', input),
+    createAppointmentType: (input) => mutate('/appointment-types', 'POST', input),
+    createAvailability: (input) => mutate('/availability', 'POST', input),
+    createGroup: (input) => mutate('/groups', 'POST', input),
+    createTask: (input) => mutate('/tasks', 'POST', input),
+    current: () => read('/loop/dashboard'),
+    listAvailability: () => read('/availability'),
+    async removeAvailability(availabilityId) {
+      await mutate(`/availability/${encodeURIComponent(availabilityId)}`, 'DELETE');
+    },
+    removeGroupMember: (groupId, clientId) =>
+      mutate(
+        `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(clientId)}`,
+        'DELETE',
+      ),
+    saveNotes: (relationshipId, notes) =>
+      mutate(`/relationships/${encodeURIComponent(relationshipId)}/notes`, 'PATCH', { notes }),
+    updateAppointment: (appointmentId, input) =>
+      mutate(`/appointments/${encodeURIComponent(appointmentId)}`, 'PATCH', input),
+    updateAppointmentType: (appointmentTypeId, input) =>
+      mutate(`/appointment-types/${encodeURIComponent(appointmentTypeId)}`, 'PATCH', input),
+    updateGroup: (groupId, input) =>
+      mutate(`/groups/${encodeURIComponent(groupId)}`, 'PATCH', input),
+    updateTask: (taskId, action) =>
+      mutate(`/tasks/${encodeURIComponent(taskId)}`, 'PATCH', { action }),
+    workspace: (relationshipId) =>
+      read(`/relationships/${encodeURIComponent(relationshipId)}/workspace`),
+  };
+}
+
+export function createClientLoopApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): ClientLoopApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  async function mutate<T>(path: string, method: 'DELETE' | 'POST', body?: unknown): Promise<T> {
+    const csrf = await csrfFor(normalizedBaseUrl, 'client', request);
+    const response = await request(`${normalizedBaseUrl}/client${path}`, {
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include',
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'x-csrf-token': csrf,
+      },
+      method,
+    });
+    return responseJson<T>(response);
+  }
+  return {
+    completeTask: (taskId) => mutate(`/tasks/${encodeURIComponent(taskId)}/complete`, 'POST'),
+    confirmBooking: (holdId, input) =>
+      mutate(`/booking/holds/${encodeURIComponent(holdId)}/confirm`, 'POST', input),
+    createHold: (input) => mutate('/booking/holds', 'POST', input),
+    async current() {
+      const response = await request(`${normalizedBaseUrl}/client/home`, {
+        credentials: 'include',
+      });
+      return responseJson<ClientLoopHome>(response);
+    },
+    async releaseHold(holdId) {
+      await mutate(`/booking/holds/${encodeURIComponent(holdId)}`, 'DELETE');
+    },
   };
 }

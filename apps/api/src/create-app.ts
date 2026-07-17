@@ -33,11 +33,14 @@ import {
   KmsIntakeAnswerEncryptor,
 } from './client-onboarding-store.js';
 import type { ClientOnboardingStore } from './client-onboarding.service.js';
+import { DatabaseCoachingLoopStore, KmsRelationshipNotesCipher } from './coaching-loop-store.js';
+import type { CoachingLoopStore } from './coaching-loop.service.js';
 
 export interface AppDependencies {
   allowedOrigins: ReadonlySet<string>;
   authSessionStore: AuthSessionStore;
   clientOnboardingStore?: ClientOnboardingStore;
+  coachingLoopStore?: CoachingLoopStore;
   setupAssetStore?: CoachProfileAssetStore;
   setupStore?: CoachSetupStore;
   signupBillingClient?: FlowBBillingClient;
@@ -104,6 +107,21 @@ const missingClientOnboardingStore: ClientOnboardingStore = {
   submitIntake: async () => missingSignupDependency('clientOnboardingStore'),
 };
 
+const nestLifecycleProperties = new Set<PropertyKey>([
+  'beforeApplicationShutdown',
+  'onApplicationBootstrap',
+  'onApplicationShutdown',
+  'onModuleDestroy',
+  'onModuleInit',
+  'then',
+]);
+const missingCoachingLoopStore = new Proxy({} as CoachingLoopStore, {
+  get: (_target, property) =>
+    nestLifecycleProperties.has(property)
+      ? undefined
+      : async () => missingSignupDependency('coachingLoopStore'),
+});
+
 async function environmentDependencies(): Promise<AppDependencies> {
   const database = createDatabase({
     connectionString: databaseConnectionString(process.env.DATABASE_SECRET),
@@ -121,6 +139,7 @@ async function environmentDependencies(): Promise<AppDependencies> {
     ssl: { rejectUnauthorized: true },
   });
   await boss.start();
+  const kms = new KMSClient({});
   return {
     allowedOrigins: configuredAllowedOrigins(
       process.env.AUTH_ALLOWED_ORIGINS,
@@ -130,7 +149,17 @@ async function environmentDependencies(): Promise<AppDependencies> {
     clientOnboardingStore: new DatabaseClientOnboardingStore(
       database,
       boss,
-      new KmsIntakeAnswerEncryptor(new KMSClient({})),
+      new KmsIntakeAnswerEncryptor(kms),
+      {
+        clientAppBaseUrl,
+        coachAppBaseUrl: appBaseUrl,
+        emailFrom: process.env.CLIENT_EMAIL_FROM ?? 'Traverse <no-reply@mail.traversecoaching.com>',
+      },
+    ),
+    coachingLoopStore: new DatabaseCoachingLoopStore(
+      database,
+      boss,
+      new KmsRelationshipNotesCipher(kms),
       {
         clientAppBaseUrl,
         coachAppBaseUrl: appBaseUrl,
@@ -181,6 +210,9 @@ export async function createApp(
       },
       {
         store: resolvedDependencies.clientOnboardingStore ?? missingClientOnboardingStore,
+      },
+      {
+        store: resolvedDependencies.coachingLoopStore ?? missingCoachingLoopStore,
       },
     ),
     { rawBody: true, ...options },

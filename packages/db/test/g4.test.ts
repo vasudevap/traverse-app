@@ -48,6 +48,8 @@ if (databaseUrl === undefined || databaseUrl === '') {
   const appointmentTypeA = '00000000-0000-7000-8000-000000000403';
   const availabilityWindowA = '00000000-0000-7000-8000-000000000404';
   const taskA = '00000000-0000-7000-8000-000000000405';
+  const appointmentTypeOtherCoachA = '00000000-0000-7000-8000-000000000406';
+  const availabilityWindowOtherCoachA = '00000000-0000-7000-8000-000000000407';
 
   const auditClient: SqlClient = {
     async query<Row extends object>(text: string, values?: unknown[]) {
@@ -282,9 +284,10 @@ if (databaseUrl === undefined || databaseUrl === '') {
         INSERT INTO app.appointment_types
           (id, tenant_id, coach_id, name, default_duration_minutes, self_bookable)
         VALUES
-          ($1, $2, $3, 'Coaching session', 60, true)
+          ($1, $2, $3, 'Coaching session', 60, true),
+          ($4, $2, $5, 'Other coach session', 60, true)
       `,
-        [appointmentTypeA, tenantA, ownerCoachA],
+        [appointmentTypeA, tenantA, ownerCoachA, appointmentTypeOtherCoachA, regularCoachA],
       );
       await seedClient.query(
         `
@@ -295,11 +298,15 @@ if (databaseUrl === undefined || databaseUrl === '') {
           )
         VALUES
           (
-            $1, $2, $3, 'slot', '2026-08-03T15:00:00.000Z',
-            '2026-08-03T16:00:00.000Z', 'America/Toronto'
+            $1, $2, $3, 'slot', '2035-08-03T15:00:00.000Z',
+            '2035-08-03T16:00:00.000Z', 'America/Toronto'
+          ),
+          (
+            $4, $2, $5, 'slot', '2035-08-03T17:00:00.000Z',
+            '2035-08-03T18:00:00.000Z', 'America/Toronto'
           )
       `,
-        [availabilityWindowA, tenantA, ownerCoachA],
+        [availabilityWindowA, tenantA, ownerCoachA, availabilityWindowOtherCoachA, regularCoachA],
       );
       await seedClient.query(
         `
@@ -882,6 +889,181 @@ if (databaseUrl === undefined || databaseUrl === '') {
     });
   });
 
+  test('TRA-41 clients cannot change task deadlines assigned by their coach', async () => {
+    const dueAtState = await withRuntimeContext(clientContext(), (client) =>
+      sqlState(() =>
+        client.query('UPDATE app.tasks SET due_at = $1 WHERE id = $2', [
+          '2026-08-01T12:00:00.000Z',
+          taskA,
+        ]),
+      ),
+    );
+    assert.equal(dueAtState, '42501');
+  });
+
+  test('TRA-41 clients see and hold slots only for their active coach relationship', async () => {
+    await withRuntimeContext(clientContext(), async (client) => {
+      const types = await client.query<{ id: string }>(
+        'SELECT id FROM app.appointment_types ORDER BY id',
+      );
+      assert.deepEqual(types.rows, [{ id: appointmentTypeA }]);
+
+      const slots = await client.query<{ id: string }>(
+        'SELECT id FROM app.availability_windows ORDER BY id',
+      );
+      assert.deepEqual(slots.rows, [{ id: availabilityWindowA }]);
+    });
+
+    const unrelatedState = await withRuntimeContext(clientContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.booking_holds
+              (tenant_id, availability_window_id, client_id, starts_at, ends_at, expires_at)
+            VALUES (
+              $1, $2, $3, '2035-08-03T17:00:00.000Z',
+              '2035-08-03T18:00:00.000Z', now() + interval '10 minutes'
+            )
+          `,
+          [tenantA, availabilityWindowOtherCoachA, clientA],
+        ),
+      ),
+    );
+    assert.equal(unrelatedState, '42501');
+
+    const mismatchedTimeState = await withRuntimeContext(clientContext(), (client) =>
+      sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.booking_holds
+              (tenant_id, availability_window_id, client_id, starts_at, ends_at, expires_at)
+            VALUES (
+              $1, $2, $3, '2035-08-03T15:05:00.000Z',
+              '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
+            )
+          `,
+          [tenantA, availabilityWindowA, clientA],
+        ),
+      ),
+    );
+    assert.equal(mismatchedTimeState, '42501');
+  });
+
+  test('TRA-41 client booking requires a live converted hold and canonical type details', async () => {
+    const activeHoldState = await withRuntimeContext(clientContext(), async (client) => {
+      const hold = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.booking_holds
+            (tenant_id, availability_window_id, client_id, starts_at, ends_at, expires_at)
+          VALUES (
+            $1, $2, $3, '2035-08-03T15:00:00.000Z',
+            '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
+          )
+          RETURNING id
+        `,
+        [tenantA, availabilityWindowA, clientA],
+      );
+      return sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.appointments
+              (
+                tenant_id, coach_id, relationship_id, appointment_type_id, booking_hold_id,
+                booked_by_client_id, title, starts_at, ends_at, timezone, status
+              )
+            VALUES (
+              $1, $2, $3, $4, $5, $6, 'Coaching session',
+              '2035-08-03T15:00:00.000Z', '2035-08-03T16:00:00.000Z',
+              'America/Toronto', 'booked'
+            )
+          `,
+          [tenantA, ownerCoachA, relationshipAOwner, appointmentTypeA, hold.rows[0]?.id, clientA],
+        ),
+      );
+    });
+    assert.equal(activeHoldState, '42501');
+
+    const untrustedTypeState = await withRuntimeContext(clientContext(), async (client) => {
+      const hold = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.booking_holds
+            (tenant_id, availability_window_id, client_id, starts_at, ends_at, expires_at)
+          VALUES (
+            $1, $2, $3, '2035-08-03T15:00:00.000Z',
+            '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
+          )
+          RETURNING id
+        `,
+        [tenantA, availabilityWindowA, clientA],
+      );
+      await client.query('UPDATE app.booking_holds SET status = $1 WHERE id = $2', [
+        'converted',
+        hold.rows[0]?.id,
+      ]);
+      return sqlState(() =>
+        client.query(
+          `
+            INSERT INTO app.appointments
+              (
+                tenant_id, coach_id, relationship_id, appointment_type_id, booking_hold_id,
+                booked_by_client_id, title, starts_at, ends_at, timezone, status
+              )
+            VALUES (
+              $1, $2, $3, $4, $5, $6, 'Untrusted title',
+              '2035-08-03T15:00:00.000Z', '2035-08-03T16:00:00.000Z',
+              'America/Toronto', 'booked'
+            )
+          `,
+          [
+            tenantA,
+            ownerCoachA,
+            relationshipAOwner,
+            appointmentTypeOtherCoachA,
+            hold.rows[0]?.id,
+            clientA,
+          ],
+        ),
+      );
+    });
+    assert.equal(untrustedTypeState, '42501');
+
+    await withRuntimeContext(clientContext(), async (client) => {
+      const hold = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.booking_holds
+            (tenant_id, availability_window_id, client_id, starts_at, ends_at, expires_at)
+          VALUES (
+            $1, $2, $3, '2035-08-03T15:00:00.000Z',
+            '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
+          )
+          RETURNING id
+        `,
+        [tenantA, availabilityWindowA, clientA],
+      );
+      await client.query('UPDATE app.booking_holds SET status = $1 WHERE id = $2', [
+        'converted',
+        hold.rows[0]?.id,
+      ]);
+      const appointment = await client.query<{ id: string }>(
+        `
+          INSERT INTO app.appointments
+            (
+              tenant_id, coach_id, relationship_id, appointment_type_id, booking_hold_id,
+              booked_by_client_id, title, starts_at, ends_at, timezone, status
+            )
+          VALUES (
+            $1, $2, $3, $4, $5, $6, 'Coaching session',
+            '2035-08-03T15:00:00.000Z', '2035-08-03T16:00:00.000Z',
+            'America/Toronto', 'booked'
+          )
+          RETURNING id
+        `,
+        [tenantA, ownerCoachA, relationshipAOwner, appointmentTypeA, hold.rows[0]?.id, clientA],
+      );
+      assert.equal(appointment.rowCount, 1);
+    });
+  });
+
   test('Stage 2 booking holds and appointments reject double-booked slots', async () => {
     await withRuntimeContext(clientContext(), async (client) => {
       await client.query(
@@ -892,8 +1074,8 @@ if (databaseUrl === undefined || databaseUrl === '') {
               expires_at
             )
           VALUES (
-            $1, $2, $3, '2026-08-03T15:00:00.000Z',
-            '2026-08-03T16:00:00.000Z', '2026-08-03T14:55:00.000Z'
+            $1, $2, $3, '2035-08-03T15:00:00.000Z',
+            '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
           )
         `,
         [tenantA, availabilityWindowA, clientA],
@@ -908,8 +1090,8 @@ if (databaseUrl === undefined || databaseUrl === '') {
                 expires_at
               )
             VALUES (
-              $1, $2, $3, '2026-08-03T15:00:00.000Z',
-              '2026-08-03T16:00:00.000Z', '2026-08-03T14:55:00.000Z'
+              $1, $2, $3, '2035-08-03T15:00:00.000Z',
+              '2035-08-03T16:00:00.000Z', now() + interval '10 minutes'
             )
           `,
           [tenantA, availabilityWindowA, clientA],

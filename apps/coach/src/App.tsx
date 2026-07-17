@@ -1,11 +1,16 @@
 import {
   ApiResponseError,
   type CoachContractSnapshot,
+  type CoachLoopDashboard,
+  type CoachLoopWorkspace,
   type CoachSetupSnapshot,
   createCoachContractApiClient,
   createCoachInviteApiClient,
+  createCoachLoopApiClient,
   createCoachSetupApiClient,
   type InviteOptions,
+  type LoopAppointment,
+  type LoopGroup,
   type SetupStep,
 } from '@traverse/api-client';
 import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@traverse/ui';
@@ -14,11 +19,12 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 const setupApi = createCoachSetupApiClient();
 const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
+const loopApi = createCoachLoopApiClient();
 const navigation = [
-  { current: true, href: '#dashboard', label: 'Dashboard' },
+  { current: true, href: '/', label: 'Dashboard' },
   { href: '/clients', label: 'Clients' },
   { href: '/calendar', label: 'Calendar' },
-  { href: '/library', label: 'Library' },
+  { href: '/groups', label: 'Groups' },
 ];
 
 type SetupAction = () => Promise<CoachSetupSnapshot>;
@@ -724,54 +730,1086 @@ function CoachDashboard({
   onReview(): void;
   snapshot: CoachSetupSnapshot;
 }) {
-  const finished = snapshot.checklist.filter((item) => item.status !== 'pending').length;
+  return <LiveCoachLoop focus="dashboard" onReview={onReview} setupSnapshot={snapshot} />;
+}
+
+type CoachLoopFocus = 'calendar' | 'clients' | 'dashboard' | 'groups';
+
+function tomorrowMorning(): string {
+  const value = new Date();
+  value.setDate(value.getDate() + 1);
+  value.setHours(9, 0, 0, 0);
+  const offset = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function formatWhen(value: string): string {
+  return new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function healthLabel(health: CoachLoopDashboard['relationships'][number]['health']): string {
+  const labels = {
+    active: 'Recently active',
+    awaiting_first_touch: 'Awaiting first touch',
+    inactive_risk: 'Needs a check-in',
+    newly_active: 'Newly active',
+    scheduled: 'Session scheduled',
+    task_pending: 'Task pending',
+  };
+  return labels[health];
+}
+
+function healthTone(
+  health: CoachLoopDashboard['relationships'][number]['health'],
+): 'accent' | 'mark' | 'neutral' {
+  if (health === 'newly_active' || health === 'scheduled') return 'accent';
+  if (health === 'awaiting_first_touch' || health === 'inactive_risk') return 'mark';
+  return 'neutral';
+}
+
+function LiveCoachLoop({
+  focus,
+  onReview,
+  setupSnapshot,
+}: {
+  focus: CoachLoopFocus;
+  onReview?: () => void;
+  setupSnapshot?: CoachSetupSnapshot;
+}) {
+  const [dashboard, setDashboard] = useState<CoachLoopDashboard | null>(null);
+  const [availability, setAvailability] = useState<
+    Awaited<ReturnType<typeof loopApi.listAvailability>>
+  >([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [targetType, setTargetType] = useState<'client' | 'group'>('client');
+  const [relationshipId, setRelationshipId] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [appointmentTypeId, setAppointmentTypeId] = useState('');
+  const [appointmentTitle, setAppointmentTitle] = useState('Coaching session');
+  const [appointmentStart, setAppointmentStart] = useState(tomorrowMorning);
+  const [appointmentDuration, setAppointmentDuration] = useState(60);
+  const [meetingLink, setMeetingLink] = useState('');
+  const [appointmentNotes, setAppointmentNotes] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskDueAt, setTaskDueAt] = useState('');
+  const [typeName, setTypeName] = useState('Coaching session');
+  const [typeDuration, setTypeDuration] = useState(60);
+  const [typeSelfBookable, setTypeSelfBookable] = useState(true);
+  const [slotStart, setSlotStart] = useState(tomorrowMorning);
+  const [slotDuration, setSlotDuration] = useState(60);
+  const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
+  const [membershipGroupId, setMembershipGroupId] = useState('');
+  const [membershipClientId, setMembershipClientId] = useState('');
+  const [editingAppointment, setEditingAppointment] = useState<LoopAppointment | null>(null);
+  const [rescheduleStart, setRescheduleStart] = useState(tomorrowMorning);
+
+  async function load() {
+    setError(null);
+    try {
+      const [nextDashboard, nextAvailability] = await Promise.all([
+        loopApi.current(),
+        loopApi.listAvailability(),
+      ]);
+      setDashboard(nextDashboard);
+      setAvailability(nextAvailability);
+      const requestedRelationshipId = new URLSearchParams(window.location.search).get(
+        'relationshipId',
+      );
+      setRelationshipId((current) => {
+        if (current) return current;
+        if (
+          requestedRelationshipId !== null &&
+          nextDashboard.relationships.some(
+            (relationship) => relationship.id === requestedRelationshipId,
+          )
+        ) {
+          return requestedRelationshipId;
+        }
+        return nextDashboard.relationships[0]?.id || '';
+      });
+      setGroupId((current) => current || nextDashboard.groups[0]?.id || '');
+      setAppointmentTypeId(
+        (current) =>
+          current || nextDashboard.appointmentTypes.find((type) => type.active)?.id || '',
+      );
+      setMembershipGroupId((current) => current || nextDashboard.groups[0]?.id || '');
+      setMembershipClientId(
+        (current) => current || nextDashboard.relationships[0]?.client.id || '',
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function run(key: string, action: () => Promise<unknown>) {
+    setBusy(key);
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function createAppointment(event: FormEvent) {
+    event.preventDefault();
+    const startsAt = new Date(appointmentStart);
+    const endsAt = new Date(startsAt.getTime() + appointmentDuration * 60_000);
+    void run('appointment', () =>
+      loopApi.createAppointment({
+        appointmentTypeId: appointmentTypeId || null,
+        endsAt: endsAt.toISOString(),
+        groupId: targetType === 'group' ? groupId : null,
+        meetingLink,
+        notes: appointmentNotes,
+        relationshipId: targetType === 'client' ? relationshipId : null,
+        startsAt: startsAt.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        title: appointmentTitle,
+      }),
+    );
+  }
+
+  function createTask(event: FormEvent) {
+    event.preventDefault();
+    void run('task', async () => {
+      await loopApi.createTask({
+        description: taskDescription,
+        dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : null,
+        relationshipId,
+        title: taskTitle,
+      });
+      setTaskTitle('');
+      setTaskDescription('');
+    });
+  }
+
+  function createType(event: FormEvent) {
+    event.preventDefault();
+    void run('type', () =>
+      loopApi.createAppointmentType({
+        currency: null,
+        defaultDurationMinutes: typeDuration,
+        name: typeName,
+        notes: '',
+        priceAmount: null,
+        selfBookable: typeSelfBookable,
+      }),
+    );
+  }
+
+  function createSlot(event: FormEvent) {
+    event.preventDefault();
+    const startsAt = new Date(slotStart);
+    void run('slot', () =>
+      loopApi.createAvailability({
+        endsAt: new Date(startsAt.getTime() + slotDuration * 60_000).toISOString(),
+        startsAt: startsAt.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        type: 'slot',
+      }),
+    );
+  }
+
+  function createGroup(event: FormEvent) {
+    event.preventDefault();
+    void run('group', async () => {
+      await loopApi.createGroup({ description: groupDescription, name: groupName });
+      setGroupName('');
+      setGroupDescription('');
+    });
+  }
+
+  function reschedule(event: FormEvent) {
+    event.preventDefault();
+    if (editingAppointment === null) return;
+    const startsAt = new Date(rescheduleStart);
+    const duration =
+      new Date(editingAppointment.endsAt).getTime() -
+      new Date(editingAppointment.startsAt).getTime();
+    void run(`move-${editingAppointment.id}`, async () => {
+      await loopApi.updateAppointment(editingAppointment.id, {
+        action: 'reschedule',
+        endsAt: new Date(startsAt.getTime() + duration).toISOString(),
+        meetingLink: editingAppointment.meetingLink ?? '',
+        notes: editingAppointment.notes ?? '',
+        startsAt: startsAt.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      setEditingAppointment(null);
+    });
+  }
+
+  if (dashboard === null) {
+    return (
+      <LoadError
+        error={error ?? 'Opening your coaching dashboard...'}
+        onRetry={() => void load()}
+      />
+    );
+  }
+
+  const headings = {
+    calendar: {
+      eyebrow: 'Scheduling',
+      summary: 'Create sessions, offer bookable times, and keep calendars in sync.',
+      title: 'Calendar',
+    },
+    clients: {
+      eyebrow: 'Relationships',
+      summary: 'See who needs attention and move straight into the relationship workspace.',
+      title: 'Clients',
+    },
+    dashboard: {
+      eyebrow: 'Coach operating view',
+      summary: 'The next useful action for every active coaching relationship.',
+      title: `Welcome, ${dashboard.coachName.split(' ')[0] || 'Coach'}`,
+    },
+    groups: {
+      eyebrow: 'Cohorts',
+      summary: 'Organize clients into groups and schedule shared sessions.',
+      title: 'Groups',
+    },
+  };
+  const heading = headings[focus];
+
   return (
     <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
       <PageHeader
         actions={
-          <a className="trv-button trv-button--primary" href="/clients/new">
-            Invite your first client
+          <div className="coach-loop-actions">
+            <a className="trv-button trv-button--primary" href="/clients/new">
+              Invite a client
+            </a>
+            {onReview ? (
+              <Button onClick={onReview} type="button" variant="line">
+                Practice settings
+              </Button>
+            ) : null}
+          </div>
+        }
+        eyebrow={heading.eyebrow}
+        summary={heading.summary}
+        title={heading.title}
+      />
+      {error ? (
+        <div className="setup-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {focus === 'dashboard' || focus === 'clients' ? (
+        <div className="coach-loop-stack">
+          {dashboard.relationships.length === 0 ? (
+            <Card className="dashboard-ready-card" tone="editorial">
+              <div className="dashboard-ready-card__mark" aria-hidden="true">
+                ✓
+              </div>
+              <div>
+                <div className="trv-eyebrow">Practice ready</div>
+                <h2>{setupSnapshot?.practice.displayName ?? 'Your practice'} is ready.</h2>
+                <p>Invite a client to begin the active coaching loop.</p>
+                <a className="trv-button trv-button--primary" href="/clients/new">
+                  Invite your first client
+                </a>
+              </div>
+            </Card>
+          ) : (
+            <section className="coach-loop-section">
+              <div className="coach-loop-section__heading">
+                <div>
+                  <div className="trv-eyebrow">Needs attention</div>
+                  <h2>Active relationships</h2>
+                </div>
+                <Badge tone="neutral">{dashboard.relationships.length} active</Badge>
+              </div>
+              <div className="coach-relationship-grid">
+                {dashboard.relationships.map((relationship) => (
+                  <Card className="coach-relationship-card" key={relationship.id}>
+                    <div className="coach-relationship-card__top">
+                      <div>
+                        <h3>{relationship.client.name}</h3>
+                        <span>{relationship.client.email}</span>
+                      </div>
+                      <Badge tone={healthTone(relationship.health)}>
+                        {healthLabel(relationship.health)}
+                      </Badge>
+                    </div>
+                    <div className="coach-relationship-card__facts">
+                      <span>{relationship.openTaskCount} open tasks</span>
+                      <span>
+                        {relationship.nextAppointment
+                          ? formatWhen(relationship.nextAppointment.startsAt)
+                          : 'No session booked'}
+                      </span>
+                    </div>
+                    <a
+                      className="trv-button trv-button--line"
+                      href={`/clients/${encodeURIComponent(relationship.id)}`}
+                    >
+                      Open client workspace
+                    </a>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="coach-loop-section">
+            <div className="coach-loop-section__heading">
+              <div>
+                <div className="trv-eyebrow">Coming up</div>
+                <h2>Upcoming appointments</h2>
+              </div>
+              <a className="trv-button trv-button--line" href="/calendar">
+                Manage calendar
+              </a>
+            </div>
+            <AppointmentList
+              appointments={dashboard.upcomingAppointments}
+              busy={busy}
+              onAction={(appointment, action) =>
+                void run(`${action}-${appointment.id}`, () =>
+                  loopApi.updateAppointment(appointment.id, { action }),
+                )
+              }
+              onReschedule={(appointment) => {
+                setEditingAppointment(appointment);
+                const value = new Date(appointment.startsAt);
+                const offset = value.getTimezoneOffset() * 60_000;
+                setRescheduleStart(new Date(value.getTime() - offset).toISOString().slice(0, 16));
+              }}
+            />
+          </section>
+        </div>
+      ) : null}
+
+      {focus === 'calendar' ? (
+        <div className="coach-loop-stack">
+          <div className="coach-loop-form-grid">
+            <form className="coach-loop-form" onSubmit={createAppointment}>
+              <Card>
+                <div className="trv-eyebrow">New appointment</div>
+                <h2>Schedule a session</h2>
+                <Field label="Target">
+                  <select
+                    className="trv-input"
+                    onChange={(event) => setTargetType(event.target.value as 'client' | 'group')}
+                    value={targetType}
+                  >
+                    <option value="client">Client</option>
+                    <option value="group">Group</option>
+                  </select>
+                </Field>
+                <Field label={targetType === 'client' ? 'Client' : 'Group'}>
+                  <select
+                    className="trv-input"
+                    onChange={(event) =>
+                      targetType === 'client'
+                        ? setRelationshipId(event.target.value)
+                        : setGroupId(event.target.value)
+                    }
+                    required
+                    value={targetType === 'client' ? relationshipId : groupId}
+                  >
+                    {(targetType === 'client' ? dashboard.relationships : dashboard.groups).map(
+                      (target) => (
+                        <option key={target.id} value={target.id}>
+                          {'client' in target ? target.client.name : target.name}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </Field>
+                <Field label="Appointment type">
+                  <select
+                    className="trv-input"
+                    onChange={(event) => setAppointmentTypeId(event.target.value)}
+                    value={appointmentTypeId}
+                  >
+                    <option value="">No type</option>
+                    {dashboard.appointmentTypes
+                      .filter((type) => type.active)
+                      .map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Title">
+                  <TextInput
+                    maxLength={200}
+                    onChange={(event) => setAppointmentTitle(event.target.value)}
+                    required
+                    value={appointmentTitle}
+                  />
+                </Field>
+                <div className="coach-loop-inline-fields">
+                  <Field label="Starts">
+                    <TextInput
+                      onChange={(event) => setAppointmentStart(event.target.value)}
+                      required
+                      type="datetime-local"
+                      value={appointmentStart}
+                    />
+                  </Field>
+                  <Field label="Minutes">
+                    <TextInput
+                      max={480}
+                      min={5}
+                      onChange={(event) => setAppointmentDuration(Number(event.target.value))}
+                      required
+                      type="number"
+                      value={appointmentDuration}
+                    />
+                  </Field>
+                </div>
+                <Field hint="Optional HTTPS Zoom, Teams, or Meet link" label="Meeting link">
+                  <TextInput
+                    onChange={(event) => setMeetingLink(event.target.value)}
+                    type="url"
+                    value={meetingLink}
+                  />
+                </Field>
+                <Field hint="Optional" label="Agenda or notes">
+                  <textarea
+                    className="trv-input coach-loop-textarea"
+                    maxLength={4000}
+                    onChange={(event) => setAppointmentNotes(event.target.value)}
+                    value={appointmentNotes}
+                  />
+                </Field>
+                <Button disabled={busy === 'appointment'} type="submit">
+                  {busy === 'appointment' ? 'Scheduling...' : 'Save appointment'}
+                </Button>
+              </Card>
+            </form>
+
+            <form className="coach-loop-form" onSubmit={createTask}>
+              <Card tone="editorial">
+                <div className="trv-eyebrow">Accountability</div>
+                <h2>Assign a task</h2>
+                <Field label="Client">
+                  <select
+                    className="trv-input"
+                    onChange={(event) => setRelationshipId(event.target.value)}
+                    required
+                    value={relationshipId}
+                  >
+                    {dashboard.relationships.map((relationship) => (
+                      <option key={relationship.id} value={relationship.id}>
+                        {relationship.client.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Task">
+                  <TextInput
+                    maxLength={200}
+                    onChange={(event) => setTaskTitle(event.target.value)}
+                    required
+                    value={taskTitle}
+                  />
+                </Field>
+                <Field hint="Optional" label="Description">
+                  <textarea
+                    className="trv-input coach-loop-textarea"
+                    maxLength={4000}
+                    onChange={(event) => setTaskDescription(event.target.value)}
+                    value={taskDescription}
+                  />
+                </Field>
+                <Field hint="Optional" label="Due date">
+                  <TextInput
+                    onChange={(event) => setTaskDueAt(event.target.value)}
+                    type="datetime-local"
+                    value={taskDueAt}
+                  />
+                </Field>
+                <Button disabled={busy === 'task'} type="submit">
+                  {busy === 'task' ? 'Assigning...' : 'Assign task'}
+                </Button>
+              </Card>
+            </form>
+          </div>
+
+          {editingAppointment ? (
+            <form className="coach-loop-reschedule" onSubmit={reschedule}>
+              <Card tone="editorial">
+                <div>
+                  <div className="trv-eyebrow">Reschedule</div>
+                  <h2>{editingAppointment.title}</h2>
+                </div>
+                <Field label="New start">
+                  <TextInput
+                    onChange={(event) => setRescheduleStart(event.target.value)}
+                    required
+                    type="datetime-local"
+                    value={rescheduleStart}
+                  />
+                </Field>
+                <div className="coach-loop-actions">
+                  <Button disabled={busy === `move-${editingAppointment.id}`} type="submit">
+                    Save new time
+                  </Button>
+                  <Button onClick={() => setEditingAppointment(null)} type="button" variant="line">
+                    Cancel
+                  </Button>
+                </div>
+              </Card>
+            </form>
+          ) : null}
+
+          <AppointmentList
+            appointments={dashboard.upcomingAppointments}
+            busy={busy}
+            onAction={(appointment, action) =>
+              void run(`${action}-${appointment.id}`, () =>
+                loopApi.updateAppointment(appointment.id, { action }),
+              )
+            }
+            onReschedule={(appointment) => {
+              setEditingAppointment(appointment);
+              const value = new Date(appointment.startsAt);
+              const offset = value.getTimezoneOffset() * 60_000;
+              setRescheduleStart(new Date(value.getTime() - offset).toISOString().slice(0, 16));
+            }}
+          />
+
+          <div className="coach-loop-form-grid">
+            <form className="coach-loop-form" onSubmit={createType}>
+              <Card>
+                <div className="trv-eyebrow">Configuration</div>
+                <h2>Appointment types</h2>
+                <Field label="Name">
+                  <TextInput
+                    maxLength={120}
+                    onChange={(event) => setTypeName(event.target.value)}
+                    required
+                    value={typeName}
+                  />
+                </Field>
+                <Field label="Default minutes">
+                  <TextInput
+                    max={480}
+                    min={5}
+                    onChange={(event) => setTypeDuration(Number(event.target.value))}
+                    required
+                    type="number"
+                    value={typeDuration}
+                  />
+                </Field>
+                <label className="coach-loop-check">
+                  <input
+                    checked={typeSelfBookable}
+                    onChange={(event) => setTypeSelfBookable(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Clients can book proposed slots with this type
+                </label>
+                <Button disabled={busy === 'type'} type="submit">
+                  Add appointment type
+                </Button>
+                <div className="coach-loop-compact-list">
+                  {dashboard.appointmentTypes.map((type) => (
+                    <div key={type.id}>
+                      <span>
+                        <strong>{type.name}</strong>
+                        <small>{type.defaultDurationMinutes} minutes</small>
+                      </span>
+                      <Button
+                        disabled={busy === `type-${type.id}`}
+                        onClick={() =>
+                          void run(`type-${type.id}`, () =>
+                            loopApi.updateAppointmentType(type.id, { active: !type.active }),
+                          )
+                        }
+                        type="button"
+                        variant="quiet"
+                      >
+                        {type.active ? 'Deactivate' : 'Activate'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </form>
+
+            <form className="coach-loop-form" onSubmit={createSlot}>
+              <Card>
+                <div className="trv-eyebrow">Self-booking</div>
+                <h2>Propose a time</h2>
+                <Field label="Starts">
+                  <TextInput
+                    onChange={(event) => setSlotStart(event.target.value)}
+                    required
+                    type="datetime-local"
+                    value={slotStart}
+                  />
+                </Field>
+                <Field label="Minutes">
+                  <TextInput
+                    max={480}
+                    min={5}
+                    onChange={(event) => setSlotDuration(Number(event.target.value))}
+                    required
+                    type="number"
+                    value={slotDuration}
+                  />
+                </Field>
+                <Button disabled={busy === 'slot'} type="submit">
+                  Offer this time
+                </Button>
+                <div className="coach-loop-compact-list">
+                  {availability.map((slot) => (
+                    <div key={slot.id}>
+                      <span>
+                        <strong>
+                          {slot.startsAt ? formatWhen(slot.startsAt) : 'Weekly availability'}
+                        </strong>
+                        <small>{slot.timezone}</small>
+                      </span>
+                      <Button
+                        disabled={busy === `slot-${slot.id}`}
+                        onClick={() =>
+                          void run(`slot-${slot.id}`, () => loopApi.removeAvailability(slot.id))
+                        }
+                        type="button"
+                        variant="quiet"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {focus === 'groups' ? (
+        <div className="coach-loop-stack">
+          <div className="coach-loop-form-grid">
+            <form className="coach-loop-form" onSubmit={createGroup}>
+              <Card>
+                <div className="trv-eyebrow">New cohort</div>
+                <h2>Create a group</h2>
+                <Field label="Group name">
+                  <TextInput
+                    maxLength={120}
+                    onChange={(event) => setGroupName(event.target.value)}
+                    required
+                    value={groupName}
+                  />
+                </Field>
+                <Field hint="Optional" label="Description">
+                  <textarea
+                    className="trv-input coach-loop-textarea"
+                    maxLength={2000}
+                    onChange={(event) => setGroupDescription(event.target.value)}
+                    value={groupDescription}
+                  />
+                </Field>
+                <Button disabled={busy === 'group'} type="submit">
+                  Create group
+                </Button>
+              </Card>
+            </form>
+
+            <form
+              className="coach-loop-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run('member', () =>
+                  loopApi.addGroupMember(membershipGroupId, membershipClientId),
+                );
+              }}
+            >
+              <Card tone="editorial">
+                <div className="trv-eyebrow">Membership</div>
+                <h2>Add a client</h2>
+                <Field label="Group">
+                  <select
+                    className="trv-input"
+                    onChange={(event) => setMembershipGroupId(event.target.value)}
+                    required
+                    value={membershipGroupId}
+                  >
+                    {dashboard.groups
+                      .filter((group) => group.archivedAt === null)
+                      .map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Client">
+                  <select
+                    className="trv-input"
+                    onChange={(event) => setMembershipClientId(event.target.value)}
+                    required
+                    value={membershipClientId}
+                  >
+                    {dashboard.relationships.map((relationship) => (
+                      <option key={relationship.client.id} value={relationship.client.id}>
+                        {relationship.client.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Button disabled={busy === 'member'} type="submit">
+                  Add to group
+                </Button>
+              </Card>
+            </form>
+          </div>
+
+          <div className="coach-group-grid">
+            {dashboard.groups.map((group) => (
+              <GroupCard
+                busy={busy}
+                group={group}
+                key={group.id}
+                onArchive={() =>
+                  void run(`group-${group.id}`, () =>
+                    loopApi.updateGroup(group.id, {
+                      archived: group.archivedAt === null,
+                      description: group.description ?? '',
+                      name: group.name,
+                    }),
+                  )
+                }
+                onRemove={(clientId) =>
+                  void run(`member-${group.id}-${clientId}`, () =>
+                    loopApi.removeGroupMember(group.id, clientId),
+                  )
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </AppShell>
+  );
+}
+
+function AppointmentList({
+  appointments,
+  busy,
+  onAction,
+  onReschedule,
+}: {
+  appointments: LoopAppointment[];
+  busy: string | null;
+  onAction(appointment: LoopAppointment, action: 'cancel' | 'complete'): void;
+  onReschedule(appointment: LoopAppointment): void;
+}) {
+  if (appointments.length === 0) {
+    return (
+      <Card tone="editorial">
+        <p className="coach-loop-muted">No upcoming appointments.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      {appointments.map((appointment) => (
+        <div className="coach-appointment-row" key={appointment.id}>
+          <div>
+            <div className="coach-appointment-row__title">
+              <h3>{appointment.title}</h3>
+              <Badge tone={appointment.bookedByClient ? 'accent' : 'neutral'}>
+                {appointment.bookedByClient ? 'Client booked' : appointment.target.type}
+              </Badge>
+            </div>
+            <p>
+              {formatWhen(appointment.startsAt)} · {appointment.target.name}
+            </p>
+          </div>
+          <div className="coach-loop-actions">
+            <a className="trv-button trv-button--line" href={appointment.calendarUrl}>
+              iCal
+            </a>
+            <Button onClick={() => onReschedule(appointment)} type="button" variant="line">
+              Reschedule
+            </Button>
+            <Button
+              disabled={busy === `complete-${appointment.id}`}
+              onClick={() => onAction(appointment, 'complete')}
+              type="button"
+              variant="quiet"
+            >
+              Complete
+            </Button>
+            <Button
+              disabled={busy === `cancel-${appointment.id}`}
+              onClick={() => onAction(appointment, 'cancel')}
+              type="button"
+              variant="quiet"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function GroupCard({
+  busy,
+  group,
+  onArchive,
+  onRemove,
+}: {
+  busy: string | null;
+  group: LoopGroup;
+  onArchive(): void;
+  onRemove(clientId: string): void;
+}) {
+  return (
+    <Card>
+      <div className="coach-relationship-card__top">
+        <div>
+          <h3>{group.name}</h3>
+          <p>{group.description ?? 'A coaching cohort'}</p>
+        </div>
+        <Badge tone={group.archivedAt === null ? 'accent' : 'neutral'}>
+          {group.archivedAt === null ? 'Active' : 'Archived'}
+        </Badge>
+      </div>
+      <div className="coach-loop-compact-list">
+        {group.members.length === 0 ? (
+          <p className="coach-loop-muted">No members yet.</p>
+        ) : (
+          group.members.map((member) => (
+            <div key={member.clientId}>
+              <strong>{member.name}</strong>
+              <Button
+                disabled={busy === `member-${group.id}-${member.clientId}`}
+                onClick={() => onRemove(member.clientId)}
+                type="button"
+                variant="quiet"
+              >
+                Remove
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+      <Button
+        disabled={busy === `group-${group.id}`}
+        onClick={onArchive}
+        type="button"
+        variant="line"
+      >
+        {group.archivedAt === null ? 'Archive group' : 'Restore group'}
+      </Button>
+    </Card>
+  );
+}
+
+function CoachWorkspacePage({ relationshipId }: { relationshipId: string }) {
+  const [workspace, setWorkspace] = useState<CoachLoopWorkspace | null>(null);
+  const [notes, setNotes] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      const loaded = await loopApi.workspace(relationshipId);
+      setWorkspace(loaded);
+      setNotes(loaded.notes);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, [relationshipId]);
+
+  async function run(key: string, action: () => Promise<unknown>) {
+    setBusy(key);
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (workspace === null) {
+    return (
+      <LoadError error={error ?? 'Opening the client workspace...'} onRetry={() => void load()} />
+    );
+  }
+
+  return (
+    <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+      <PageHeader
+        actions={
+          <a
+            className="trv-button trv-button--primary"
+            href={`/calendar?relationshipId=${encodeURIComponent(workspace.id)}`}
+          >
+            Schedule session
           </a>
         }
-        eyebrow="Coach workspace"
-        summary="Your practice is ready. One invitation is all it takes to begin."
-        title={`Welcome, ${snapshot.coach.displayName.split(' ')[0] || 'Coach'}`}
+        eyebrow="Client workspace"
+        summary={`${workspace.client.email}${workspace.client.phone ? ` · ${workspace.client.phone}` : ''}`}
+        title={workspace.client.name}
       />
-      <div className="coach-dashboard">
-        <Card className="dashboard-ready-card">
-          <div className="dashboard-ready-card__mark" aria-hidden="true">
-            ✓
+      {error ? (
+        <div className="setup-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
+      <div className="coach-loop-stack">
+        <div className="coach-workspace-grid">
+          <Card>
+            <div className="trv-eyebrow">Relationship notes · encrypted</div>
+            <h2>Private coaching notes</h2>
+            <textarea
+              className="trv-input coach-notes-textarea"
+              maxLength={20000}
+              onChange={(event) => setNotes(event.target.value)}
+              value={notes}
+            />
+            <Button
+              disabled={busy === 'notes'}
+              onClick={() => void run('notes', () => loopApi.saveNotes(workspace.id, notes))}
+              type="button"
+            >
+              {busy === 'notes' ? 'Encrypting...' : 'Save notes securely'}
+            </Button>
+          </Card>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run('task', async () => {
+                await loopApi.createTask({
+                  description: taskDescription,
+                  dueAt: null,
+                  relationshipId: workspace.id,
+                  title: taskTitle,
+                });
+                setTaskTitle('');
+                setTaskDescription('');
+              });
+            }}
+          >
+            <Card tone="editorial">
+              <div className="trv-eyebrow">Next commitment</div>
+              <h2>Assign a task</h2>
+              <Field label="Task">
+                <TextInput
+                  maxLength={200}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                  required
+                  value={taskTitle}
+                />
+              </Field>
+              <Field hint="Optional" label="Description">
+                <textarea
+                  className="trv-input coach-loop-textarea"
+                  maxLength={4000}
+                  onChange={(event) => setTaskDescription(event.target.value)}
+                  value={taskDescription}
+                />
+              </Field>
+              <Button disabled={busy === 'task'} type="submit">
+                Assign task
+              </Button>
+            </Card>
+          </form>
+        </div>
+        <section className="coach-loop-section">
+          <div className="coach-loop-section__heading">
+            <div>
+              <div className="trv-eyebrow">Sessions</div>
+              <h2>Appointment history</h2>
+            </div>
           </div>
-          <div>
-            <div className="trv-eyebrow">Ready for your first client</div>
-            <h2>{snapshot.practice.displayName} is set up.</h2>
-            <p>
-              Your welcome, onboarding defaults, and starter policies are ready. Invite a client
-              now, or return when the timing feels right.
-            </p>
-            <a className="trv-button trv-button--primary" href="/clients/new">
-              Invite your first client
-            </a>
+          <AppointmentList
+            appointments={workspace.appointments.filter(
+              (appointment) =>
+                appointment.status === 'scheduled' || appointment.status === 'booked',
+            )}
+            busy={busy}
+            onAction={(appointment, action) =>
+              void run(`${action}-${appointment.id}`, () =>
+                loopApi.updateAppointment(appointment.id, { action }),
+              )
+            }
+            onReschedule={() => {
+              window.location.href = `/calendar?relationshipId=${encodeURIComponent(workspace.id)}`;
+            }}
+          />
+        </section>
+        <section className="coach-loop-section">
+          <div className="coach-loop-section__heading">
+            <div>
+              <div className="trv-eyebrow">Tasks</div>
+              <h2>Accountability history</h2>
+            </div>
           </div>
-        </Card>
-        <Card tone="editorial">
-          <div className="trv-eyebrow">Setup checklist</div>
-          <h2>
-            {finished} of {snapshot.checklist.length} choices saved
-          </h2>
-          <ul className="dashboard-checklist">
-            {snapshot.checklist.map((item) => (
-              <li key={item.label}>
-                <span aria-hidden="true">{item.status === 'complete' ? '✓' : '·'}</span>
-                {item.label}
-                {item.status === 'skipped' ? <small>Using defaults</small> : null}
-              </li>
-            ))}
-          </ul>
-          <button className="dashboard-edit-link" onClick={onReview} type="button">
-            Review setup
-          </button>
-        </Card>
+          <Card>
+            {workspace.tasks.length === 0 ? (
+              <p className="coach-loop-muted">No tasks assigned yet.</p>
+            ) : (
+              workspace.tasks.map((task) => (
+                <div className="coach-task-row" key={task.id}>
+                  <div>
+                    <h3>{task.title}</h3>
+                    <p>{task.description ?? 'No description'}</p>
+                  </div>
+                  <div className="coach-loop-actions">
+                    <Badge tone={task.status === 'completed' ? 'accent' : 'neutral'}>
+                      {task.status}
+                    </Badge>
+                    <Button
+                      disabled={busy === `task-${task.id}`}
+                      onClick={() =>
+                        void run(`task-${task.id}`, () =>
+                          loopApi.updateTask(
+                            task.id,
+                            task.status === 'completed' || task.status === 'canceled'
+                              ? 'reopen'
+                              : 'cancel',
+                          ),
+                        )
+                      }
+                      type="button"
+                      variant="quiet"
+                    >
+                      {task.status === 'assigned' ? 'Cancel' : 'Reopen'}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </Card>
+        </section>
       </div>
     </AppShell>
   );
@@ -1319,9 +2357,23 @@ function CoachSetupApp() {
 }
 
 export function App() {
-  const contractMatch = window.location.pathname.match(/^\/contracts\/([^/]+)\/sign$/);
+  const { pathname } = window.location;
+  const contractMatch = pathname.match(/^\/contracts\/([^/]+)\/sign$/);
   if (contractMatch?.[1] !== undefined) {
     return <CoachContractSignaturePage contractId={decodeURIComponent(contractMatch[1])} />;
   }
-  return window.location.pathname === '/clients/new' ? <InviteClientPage /> : <CoachSetupApp />;
+
+  if (pathname === '/clients/new') return <InviteClientPage />;
+
+  const relationshipMatch = pathname.match(/^\/clients\/([^/]+)$/);
+  if (relationshipMatch?.[1] !== undefined) {
+    return <CoachWorkspacePage relationshipId={decodeURIComponent(relationshipMatch[1])} />;
+  }
+
+  if (pathname === '/clients') return <LiveCoachLoop focus="clients" />;
+  if (pathname === '/calendar') return <LiveCoachLoop focus="calendar" />;
+  if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
+  if (pathname === '/dashboard') return <LiveCoachLoop focus="dashboard" />;
+
+  return <CoachSetupApp />;
 }
