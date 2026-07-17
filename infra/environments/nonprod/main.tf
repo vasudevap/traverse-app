@@ -102,9 +102,12 @@ module "storage" {
 module "static_hosting" {
   source = "../../modules/static-hosting"
 
-  project     = "traverse"
-  environment = "nonprod"
-  enabled     = var.enable_static_hosting
+  project                   = "traverse"
+  environment               = "nonprod"
+  enabled                   = var.enable_static_hosting
+  app_domain_names          = var.static_app_domain_names
+  provision_app_certificate = var.provision_static_app_certificate
+  enable_app_aliases        = var.enable_static_app_aliases
 }
 
 module "compute" {
@@ -175,6 +178,9 @@ output "compute" {
 }
 
 output "static_hosting" {
-  description = "Guarded NonProd static app endpoints. Empty until enable_static_hosting is authorized."
-  value       = module.static_hosting.sites
+  description = "Guarded NonProd static app endpoints and certificate validation records."
+  value = {
+    sites                              = module.static_hosting.sites
+    certificate_dns_validation_records = module.static_hosting.certificate_dns_validation_records
+  }
 }

@@ -19,6 +19,33 @@ variable "enabled" {
   default     = false
 }
 
+variable "app_domain_names" {
+  description = "Authorized NonProd application hostnames keyed by static app surface."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for surface, hostname in var.app_domain_names :
+      contains(["admin", "billing-admin", "client", "coach"], surface) &&
+      can(regex("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$", hostname))
+    ])
+    error_message = "App domain names must use known surfaces and valid lower-case DNS hostnames."
+  }
+}
+
+variable "provision_app_certificate" {
+  description = "Request and retain the shared NonProd CloudFront certificate before alias activation."
+  type        = bool
+  default     = false
+}
+
+variable "enable_app_aliases" {
+  description = "Attach authorized NonProd aliases only after the shared certificate is issued."
+  type        = bool
+  default     = false
+}
+
 variable "noncurrent_version_retention_days" {
   description = "Days to retain superseded static asset versions for rollback."
   type        = number

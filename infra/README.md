@@ -349,13 +349,13 @@ so a routine plan cannot silently propose destroying the distributions and origi
 The activation does not change the existing ECS, API ingress, certificate, DNS, Cloudflare,
 or production boundaries.
 
-When enabled through an explicitly authorized NonProd Terraform plan and apply, each app
-uses only its generated `cloudfront.net` hostname and default CloudFront certificate. The
-module creates no aliases, custom certificates, Route 53 records, GoDaddy records, or
-Cloudflare configuration. S3 origins block all public access and allow object reads only
-from their exact CloudFront distribution through Origin Access Control. Bucket versioning
-retains superseded objects for 30 days, and HTTPS responses include the shared browser
-security policy.
+For the TRA-34 initial activation, each app used only its generated `cloudfront.net`
+hostname and default CloudFront certificate. S3 origins block all public access and allow
+object reads only from their exact CloudFront distribution through Origin Access Control.
+Bucket versioning retains superseded objects for 30 days, and HTTPS responses include the
+shared browser security policy. TRA-36 adds the separately guarded certificate and alias
+path described below without adding Route 53, GoDaddy, or Cloudflare configuration to
+Terraform.
 
 AWS fixes the default CloudFront certificate to the `TLSv1` security-policy label. The
 generated endpoints support TLS 1.2 and TLS 1.3, but they also permit TLS 1.0 and TLS 1.1.
@@ -395,11 +395,35 @@ The reviewed TRA-34 plan must contain exactly 35 creates, one in-place GitHub de
 role policy update, and zero destroys. The creates are four distributions, four private
 buckets and their controls, one shared Origin Access Control, one CloudFront Function, and
 one response headers policy. Stop for a new review if any other resource or action appears.
-After apply, verify the `static_hosting` output contains exactly four generated CloudFront
-endpoints, all buckets still block public access, and all distributions report enabled
-before authorizing publication.
+After apply, verify the `static_hosting.sites` output contains exactly four generated
+CloudFront endpoints, all buckets still block public access, and all distributions report
+enabled before authorizing publication.
 
 Do not dispatch the workflow before Terraform outputs four populated endpoints. Do not add
 application aliases or migrate DNS as part of this sequence. Product-domain activation is a
 separate launch operation and remains blocked by its owning certificate, DNS, and ingress
 controls.
+
+## TRA-36 functional NonProd coach and client hostnames
+
+Stage 2 requires same-site browser origins for the role-bound host-only session cookies.
+TRA-36 therefore activates only `staging-app.traversecoaching.com` and
+`staging-client.traversecoaching.com`; the Admin and Billing Admin distributions remain on
+their generated endpoints. Production aliases, marketing DNS, Microsoft 365 records, and
+the API ingress are outside this change.
+
+Activation is deliberately split into two reviewed NonProd applies:
+
+1. Keep `provision_static_app_certificate = true` and
+   `enable_static_app_aliases = false`. Apply only the static-hosting module, publish the
+   returned ACM validation CNAMEs in Cloudflare, and wait for `ISSUED`.
+2. Point the two staging hostnames to their exact generated CloudFront distribution domains.
+   After DNS review, set `enable_static_app_aliases = true`, review the saved plan, and apply
+   the alias attachment. The module fails closed if the retained certificate is not issued.
+
+The custom aliases use the shared ACM certificate, SNI, and `TLSv1.2_2021`. Do not remove
+`provision_static_app_certificate` after issuance because the certificate is protected by
+`prevent_destroy` and remains part of routine Terraform ownership. Confirm both staging
+hostnames return the expected SPA, reject unknown CORS origins, and can call
+`https://staging-api.traversecoaching.com` with role-specific cookies before Stage 2 feature
+traffic begins.

@@ -42,3 +42,21 @@ variable "enable_static_hosting" {
   type        = bool
   default     = false
 }
+
+variable "static_app_domain_names" {
+  description = "Authorized NonProd hostnames keyed by static app surface."
+  type        = map(string)
+  default     = {}
+}
+
+variable "provision_static_app_certificate" {
+  description = "Request and retain the shared NonProd app certificate before alias activation."
+  type        = bool
+  default     = false
+}
+
+variable "enable_static_app_aliases" {
+  description = "Attach NonProd app aliases only after certificate validation and DNS review."
+  type        = bool
+  default     = false
+}
