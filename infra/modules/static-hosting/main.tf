@@ -15,7 +15,31 @@ locals {
     "client",
     "coach",
   ]) : toset([])
-  name_prefix = "${var.project}-${var.environment}"
+  alias_surfaces = var.enable_app_aliases ? toset(keys(var.app_domain_names)) : toset([])
+  app_hostnames  = sort(values(var.app_domain_names))
+  name_prefix    = "${var.project}-${var.environment}"
+}
+
+resource "aws_acm_certificate" "app" {
+  count = var.provision_app_certificate ? 1 : 0
+
+  domain_name = try(local.app_hostnames[0], "invalid.invalid")
+  subject_alternative_names = length(local.app_hostnames) > 1 ? slice(
+    local.app_hostnames,
+    1,
+    length(local.app_hostnames),
+  ) : []
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+    prevent_destroy       = true
+
+    precondition {
+      condition     = var.enabled && length(var.app_domain_names) > 0
+      error_message = "Static hosting and at least one app domain name are required before requesting a certificate."
+    }
+  }
 }
 
 resource "aws_s3_bucket" "app" {
@@ -165,6 +189,7 @@ resource "aws_cloudfront_response_headers_policy" "app" {
 resource "aws_cloudfront_distribution" "app" {
   for_each = local.surfaces
 
+  aliases             = contains(local.alias_surfaces, each.key) ? [var.app_domain_names[each.key]] : []
   enabled             = true
   is_ipv6_enabled     = true
   comment             = "${var.project} ${var.environment} ${each.key} app"
@@ -211,7 +236,23 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn            = contains(local.alias_surfaces, each.key) ? aws_acm_certificate.app[0].arn : null
+    cloudfront_default_certificate = !contains(local.alias_surfaces, each.key)
+    minimum_protocol_version       = contains(local.alias_surfaces, each.key) ? "TLSv1.2_2021" : "TLSv1"
+    ssl_support_method             = contains(local.alias_surfaces, each.key) ? "sni-only" : null
+  }
+
+  lifecycle {
+    precondition {
+      condition = (
+        !contains(local.alias_surfaces, each.key) ||
+        (
+          var.provision_app_certificate &&
+          try(aws_acm_certificate.app[0].status, "") == "ISSUED"
+        )
+      )
+      error_message = "The retained app certificate must be ISSUED before a CloudFront alias is enabled."
+    }
   }
 }
 

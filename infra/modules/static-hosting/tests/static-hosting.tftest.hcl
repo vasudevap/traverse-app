@@ -12,6 +12,13 @@ mock_provider "aws" {
       id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
     }
   }
+
+  mock_resource "aws_acm_certificate" {
+    defaults = {
+      arn    = "arn:aws:acm:us-east-1:124074140404:certificate/stage-2-test"
+      status = "ISSUED"
+    }
+  }
 }
 
 variables {
@@ -91,6 +98,68 @@ run "creates_isolated_nonprod_sites" {
       distribution.ordered_cache_behavior[0].cache_policy_id == data.aws_cloudfront_cache_policy.caching_optimized.id
     ])
     error_message = "App routes must bypass caching while fingerprinted assets use optimized caching."
+  }
+}
+
+run "requests_certificate_without_activating_aliases" {
+  command = plan
+
+  variables {
+    enabled = true
+    app_domain_names = {
+      client = "staging-client.traversecoaching.com"
+      coach  = "staging-app.traversecoaching.com"
+    }
+    provision_app_certificate = true
+  }
+
+  assert {
+    condition     = length(aws_acm_certificate.app) == 1
+    error_message = "The guarded certificate phase must request exactly one shared certificate."
+  }
+
+  assert {
+    condition = alltrue([
+      for distribution in aws_cloudfront_distribution.app :
+      try(length(distribution.aliases), 0) == 0 &&
+      distribution.viewer_certificate[0].cloudfront_default_certificate
+    ])
+    error_message = "Certificate provisioning must not attach aliases before explicit activation."
+  }
+}
+
+run "activates_only_authorized_app_aliases" {
+  command = plan
+
+  variables {
+    enabled = true
+    app_domain_names = {
+      client = "staging-client.traversecoaching.com"
+      coach  = "staging-app.traversecoaching.com"
+    }
+    provision_app_certificate = true
+    enable_app_aliases        = true
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudfront_distribution.app["coach"].aliases) == 1 &&
+      contains(aws_cloudfront_distribution.app["coach"].aliases, "staging-app.traversecoaching.com") &&
+      length(aws_cloudfront_distribution.app["client"].aliases) == 1 &&
+      contains(aws_cloudfront_distribution.app["client"].aliases, "staging-client.traversecoaching.com") &&
+      try(length(aws_cloudfront_distribution.app["admin"].aliases), 0) == 0 &&
+      try(length(aws_cloudfront_distribution.app["billing-admin"].aliases), 0) == 0
+    )
+    error_message = "Alias activation must remain limited to the authorized Stage 2 coach and client surfaces."
+  }
+
+  assert {
+    condition = alltrue([
+      for surface in ["coach", "client"] :
+      !aws_cloudfront_distribution.app[surface].viewer_certificate[0].cloudfront_default_certificate &&
+      aws_cloudfront_distribution.app[surface].viewer_certificate[0].minimum_protocol_version == "TLSv1.2_2021"
+    ])
+    error_message = "Authorized aliases must use the issued ACM certificate and TLSv1.2_2021."
   }
 }
 
