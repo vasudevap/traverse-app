@@ -2,7 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { KMSClient } from '@aws-sdk/client-kms';
 import { S3Client } from '@aws-sdk/client-s3';
-import { createDatabase, databaseConnectionString as dbConnectionString } from '@traverse/db';
+import { createDatabase } from '@traverse/db';
 import {
   GENERIC_WORKER_QUEUES,
   QUEUES,
@@ -17,25 +17,36 @@ import { startWorkerHealthServer } from './health.js';
 
 export const workerQueues = GENERIC_WORKER_QUEUES;
 
+export function configuredWorkerKmsKeyId(environment: NodeJS.ProcessEnv = process.env): string {
+  const explicitKeyId = environment.APP_KMS_KEY_ID;
+  if (explicitKeyId !== undefined && explicitKeyId.trim() !== '') return explicitKeyId;
+  if (
+    environment.DEPLOYMENT_ENVIRONMENT === 'nonprod' ||
+    environment.DEPLOYMENT_ENVIRONMENT === 'prod'
+  ) {
+    return `alias/traverse/${environment.DEPLOYMENT_ENVIRONMENT}/application`;
+  }
+  throw new Error('APP_KMS_KEY_ID is required when DEPLOYMENT_ENVIRONMENT is not set.');
+}
+
 async function bootstrap(): Promise<void> {
   const connectionString = databaseConnectionString(process.env.DATABASE_SECRET);
+  const emailSender = createResendEmailSender(resendApiKey(process.env.RESEND_SECRET));
+  const assetBucket = process.env.ASSET_BUCKET_NAME;
+  const kmsKeyId = configuredWorkerKmsKeyId();
+  if (assetBucket === undefined || assetBucket.trim() === '')
+    throw new Error('ASSET_BUCKET_NAME is required.');
+
   const boss = createJobBoss({
     connectionString,
     ssl: { rejectUnauthorized: true },
   });
   await boss.start();
-  const emailSender = createResendEmailSender(resendApiKey(process.env.RESEND_SECRET));
   await boss.work(QUEUES.email, { localConcurrency: 1, perJobResults: true }, async (jobs) =>
     processEmailJobs(jobs, emailSender, console),
   );
-  const assetBucket = process.env.ASSET_BUCKET_NAME;
-  const kmsKeyId = process.env.APP_KMS_KEY_ID;
-  if (assetBucket === undefined || assetBucket.trim() === '')
-    throw new Error('ASSET_BUCKET_NAME is required.');
-  if (kmsKeyId === undefined || kmsKeyId.trim() === '')
-    throw new Error('APP_KMS_KEY_ID is required.');
   const database = createDatabase({
-    connectionString: dbConnectionString(process.env.DATABASE_SECRET),
+    connectionString,
     ssl: { rejectUnauthorized: true },
   });
   const exportRunner = new DatabaseExportArchiveRunner(
