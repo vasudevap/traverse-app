@@ -50,3 +50,25 @@ The safe opening wave is ADP-01, ADP-02, and ADP-03 with the restriction above.
 Later ADPs become eligible only when their entry condition is evidenced in Linear.
 Within a later-stage ADP, the plan declares which work orders are serial and which
 may be split after their shared contract has landed.
+
+## ADP-02 and ADP-03 concurrent execution protocol
+
+ADP-02 and ADP-03 may start together only under this protocol.
+
+| ADP                       | Exclusive paths                                                                                                          | Prohibited paths while concurrent                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 02 Stage 2 closure        | `packages/db/**`, `packages/config/**`, `apps/api/src/coach-signup*`, `apps/coach/**`, and customer-tier test fixtures   | Video worker, video-specific API modules, and client playback paths                                                     |
+| 03 Stage 3 evidence spike | `apps/video-worker/**`, new video-specific API modules, new video-specific client playback paths, and video-worker tests | `packages/db/**`, `packages/config/**`, `packages/ui/**`, existing coach signup paths, and existing coaching-loop paths |
+
+Both agents use dedicated worktrees and branches. Neither agent may rebase, merge,
+cherry-pick, edit the other branch, or commit directly to `main`.
+
+If ADP-03 needs a database migration, shared configuration, shared UI component, or
+an existing API contract, it stops before making that change. It records the exact
+required contract and continues only with non-overlapping evidence work. The
+convergence owner reviews both branch diffs after ADP-02 completes, sequences the
+shared contract, and creates a follow-up ADP when the remaining work is bounded.
+
+Each agent must leave one clean commit with focused tests and `pnpm verify` evidence.
+The convergence owner runs the full verification suite again before merging either
+branch into `main`.
