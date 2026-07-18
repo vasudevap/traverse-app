@@ -7,13 +7,29 @@ export interface VideoQueueJob {
 
 export interface VideoQueueJobResult {
   id: string;
-  output?: { processingMilliseconds: number };
+  output?: {
+    audioBytes: number;
+    mediaProcessingMilliseconds: number;
+    outputBytes: number;
+    processingMilliseconds: number;
+    processingMode: 'remux' | 'transcode';
+    sourceBytes: number;
+    thumbnailBytes: number;
+  };
   status: 'completed' | 'deadletter' | 'failed';
 }
 
 export interface VideoWorkerLogger {
   error(message: string, context: { error: string; jobId: string }): void;
-  info(message: string, context: { jobId: string; processingMilliseconds: number }): void;
+  info(
+    message: string,
+    context: {
+      jobId: string;
+      mediaProcessingMilliseconds: number;
+      processingMilliseconds: number;
+      processingMode: 'remux' | 'transcode';
+    },
+  ): void;
 }
 
 /**
@@ -32,11 +48,21 @@ export async function processVideoTranscodeJobs(
         const result = await processor.process(job.data);
         logger.info('@traverse/video-worker transcode complete', {
           jobId: job.id,
+          mediaProcessingMilliseconds: result.mediaProcessingMilliseconds,
           processingMilliseconds: result.processingMilliseconds,
+          processingMode: result.processingMode,
         });
         return {
           id: job.id,
-          output: { processingMilliseconds: result.processingMilliseconds },
+          output: {
+            audioBytes: result.audioBytes,
+            mediaProcessingMilliseconds: result.mediaProcessingMilliseconds,
+            outputBytes: result.outputBytes,
+            processingMilliseconds: result.processingMilliseconds,
+            processingMode: result.processingMode,
+            sourceBytes: result.sourceBytes,
+            thumbnailBytes: result.thumbnailBytes,
+          },
           status: 'completed' as const,
         };
       } catch (error) {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 export interface VideoTranscodeJob {
+  audioKey: string;
   attemptId: string;
   inputKey: string;
   outputKey: string;
@@ -17,16 +18,26 @@ export interface VideoObjectStore {
 
 export interface FfmpegRunner {
   createPlaybackAssets(input: {
+    audioPath: string;
     inputPath: string;
     outputPath: string;
     thumbnailPath: string;
-  }): Promise<void>;
+  }): Promise<{
+    mediaProcessingMilliseconds: number;
+    processingMode: VideoProcessingMode;
+  }>;
 }
 
+export type VideoProcessingMode = 'remux' | 'transcode';
+
 export interface VideoTranscodeResult {
+  audioBytes: number;
   attemptId: string;
+  mediaProcessingMilliseconds: number;
   outputBytes: number;
+  processingMode: VideoProcessingMode;
   processingMilliseconds: number;
+  sourceBytes: number;
   thumbnailBytes: number;
 }
 
@@ -49,7 +60,8 @@ export function parseVideoTranscodeJob(payload: unknown): VideoTranscodeJob {
   if (typeof candidate.attemptId !== 'string' || candidate.attemptId.trim() === '') {
     throw new Error('video transcode job attemptId is required.');
   }
-  const { inputKey, outputKey, thumbnailKey } = candidate;
+  const { audioKey, inputKey, outputKey, thumbnailKey } = candidate;
+  if (!validObjectKey(audioKey)) throw new Error('video transcode job audioKey is invalid.');
   if (!validObjectKey(inputKey)) throw new Error('video transcode job inputKey is invalid.');
   if (!validObjectKey(outputKey)) {
     throw new Error('video transcode job outputKey is invalid.');
@@ -58,6 +70,7 @@ export function parseVideoTranscodeJob(payload: unknown): VideoTranscodeJob {
     throw new Error('video transcode job thumbnailKey is invalid.');
   }
   return {
+    audioKey,
     attemptId: candidate.attemptId,
     inputKey,
     outputKey,
@@ -80,25 +93,38 @@ export class VideoTranscodeProcessor {
     const job = parseVideoTranscodeJob(payload);
     const workingDirectory = await mkdtemp(join(tmpdir(), 'traverse-video-'));
     const inputPath = join(workingDirectory, 'source');
+    const audioPath = join(workingDirectory, 'transcription.m4a');
     const outputPath = join(workingDirectory, 'playback.mp4');
     const thumbnailPath = join(workingDirectory, 'thumbnail.jpg');
     const startedAt = performance.now();
 
     try {
-      await writeFile(inputPath, await this.objects.download(job.inputKey));
-      await this.ffmpeg.createPlaybackAssets({ inputPath, outputPath, thumbnailPath });
-      const [output, thumbnail] = await Promise.all([
+      const source = await this.objects.download(job.inputKey);
+      await writeFile(inputPath, source);
+      const mediaResult = await this.ffmpeg.createPlaybackAssets({
+        audioPath,
+        inputPath,
+        outputPath,
+        thumbnailPath,
+      });
+      const [audio, output, thumbnail] = await Promise.all([
+        readFile(audioPath),
         readFile(outputPath),
         readFile(thumbnailPath),
       ]);
       await Promise.all([
+        this.objects.upload({ body: audio, contentType: 'audio/mp4', key: job.audioKey }),
         this.objects.upload({ body: output, contentType: 'video/mp4', key: job.outputKey }),
         this.objects.upload({ body: thumbnail, contentType: 'image/jpeg', key: job.thumbnailKey }),
       ]);
       return {
+        audioBytes: audio.byteLength,
         attemptId: job.attemptId,
+        mediaProcessingMilliseconds: mediaResult.mediaProcessingMilliseconds,
         outputBytes: output.byteLength,
+        processingMode: mediaResult.processingMode,
         processingMilliseconds: Math.round(performance.now() - startedAt),
+        sourceBytes: source.byteLength,
         thumbnailBytes: thumbnail.byteLength,
       };
     } finally {
