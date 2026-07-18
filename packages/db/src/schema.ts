@@ -124,6 +124,8 @@ export interface CoachingRelationshipTable extends AuditColumns {
   notes_enc: Buffer | null;
   notes_key_version: number | null;
   archived_at: NullableTimestamp;
+  tags: Generated<string[]>;
+  source_import_id: string | null;
 }
 
 export interface BillingPlanTable extends AuditColumns {
@@ -366,6 +368,9 @@ export interface ExportTable extends AuditColumns {
   artifact_ref: string | null;
   error_code: string | null;
   expires_at: NullableTimestamp;
+  manifest: Generated<JsonValue>;
+  archive_size_bytes: number | null;
+  completed_at: NullableTimestamp;
 }
 
 export interface ImportTable extends AuditColumns {
@@ -379,6 +384,10 @@ export interface ImportTable extends AuditColumns {
   imported_rows: number | null;
   rejected_rows: number | null;
   error_report_ref: string | null;
+  source_filename: string | null;
+  source_sha256: string | null;
+  error_report: Generated<JsonValue>;
+  completed_at: NullableTimestamp;
 }
 
 export interface StripeWebhookEventTable {

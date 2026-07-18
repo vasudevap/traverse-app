@@ -151,6 +151,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "assets" {
   bucket = aws_s3_bucket.assets.id
 
   rule {
+    id     = "expire-export-archives"
+    status = "Enabled"
+
+    filter {
+      prefix = "exports/"
+    }
+
+    expiration {
+      days = 8
+    }
+  }
+
+  rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
 
@@ -490,6 +503,31 @@ data "aws_iam_policy_document" "worker_storage" {
     sid       = "ReadBrandAssets"
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.assets.arn}/*"]
+  }
+
+  statement {
+    sid = "ListExportArchives"
+    actions = [
+      "s3:GetBucketLocation",
+      "s3:ListBucket",
+    ]
+    resources = [aws_s3_bucket.assets.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["exports/*"]
+    }
+  }
+
+  statement {
+    sid = "WriteExportArchives"
+    actions = [
+      "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
+    ]
+    resources = ["${aws_s3_bucket.assets.arn}/exports/*"]
   }
 }
 

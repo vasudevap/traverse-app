@@ -672,20 +672,43 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
           .returning('id')
           .executeTakeFirstOrThrow();
       }
-      const relationship = await database
-        .insertInto('coaching_relationships')
-        .values({
-          client_id: client.id,
-          coach_id: input.actor.coachId,
-          contract_template_id: input.contractTemplateId,
-          gate_config: asJsonGates(input.gates),
-          intake_form_id: input.intakeFormId,
-          onboarding_state: 'invited',
-          status: 'invited',
-          tenant_id: input.actor.tenantId,
-        })
-        .returning('id')
-        .executeTakeFirstOrThrow();
+      const importedRelationship = await database
+        .selectFrom('coaching_relationships')
+        .select('id')
+        .where('coach_id', '=', input.actor.coachId)
+        .where('client_id', '=', client.id)
+        .where('archived_at', 'is', null)
+        .where('onboarding_state', '=', 'imported')
+        .executeTakeFirst();
+      const relationship =
+        importedRelationship === undefined
+          ? await database
+              .insertInto('coaching_relationships')
+              .values({
+                client_id: client.id,
+                coach_id: input.actor.coachId,
+                contract_template_id: input.contractTemplateId,
+                gate_config: asJsonGates(input.gates),
+                intake_form_id: input.intakeFormId,
+                onboarding_state: 'invited',
+                status: 'invited',
+                tenant_id: input.actor.tenantId,
+              })
+              .returning('id')
+              .executeTakeFirstOrThrow()
+          : await database
+              .updateTable('coaching_relationships')
+              .set({
+                contract_template_id: input.contractTemplateId,
+                gate_config: asJsonGates(input.gates),
+                intake_form_id: input.intakeFormId,
+                onboarding_state: 'invited',
+                status: 'invited',
+                updated_at: sql`now()`,
+              })
+              .where('id', '=', importedRelationship.id)
+              .returning('id')
+              .executeTakeFirstOrThrow();
 
       if (input.gates.contractRequired && input.contractTemplateId !== null) {
         const template = await database

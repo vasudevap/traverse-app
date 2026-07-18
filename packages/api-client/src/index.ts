@@ -274,6 +274,62 @@ export interface ClientLoopApiClient {
   releaseHold(holdId: string): Promise<void>;
 }
 
+export interface ClientImportIssue {
+  code: string;
+  field: 'email' | 'name' | 'notes' | 'row' | 'tags';
+  message: string;
+  rowNumber: number;
+}
+
+export interface ClientImportPreview {
+  filename: string;
+  issues: ClientImportIssue[];
+  rejectedRows: number;
+  rows: Array<{
+    email: string;
+    name: string;
+    notes: string;
+    rowNumber: number;
+    tags: string[];
+    valid: boolean;
+  }>;
+  sourceSha256: string;
+  totalRows: number;
+  validRows: number;
+}
+
+export interface ClientImportSummary {
+  completedAt: string | null;
+  createdAt: string;
+  errorReport: ClientImportIssue[];
+  filename: string | null;
+  id: string;
+  importedRows: number | null;
+  rejectedRows: number | null;
+  status: 'failed' | 'pending' | 'processing' | 'ready';
+  totalRows: number | null;
+}
+
+export interface PracticeExportSummary {
+  archiveSizeBytes: number | null;
+  completedAt: string | null;
+  createdAt: string;
+  errorCode: string | null;
+  expiresAt: string | null;
+  id: string;
+  manifest: Record<string, unknown>;
+  status: 'expired' | 'failed' | 'pending' | 'processing' | 'ready';
+}
+
+export interface CoachDataPortabilityApiClient {
+  commitClientImport(input: { csv: string; filename: string }): Promise<ClientImportSummary>;
+  downloadExport(exportId: string): Promise<{ expiresAt: string; exportId: string; url: string }>;
+  listExports(): Promise<PracticeExportSummary[]>;
+  listImports(): Promise<ClientImportSummary[]>;
+  previewClientImport(input: { csv: string; filename: string }): Promise<ClientImportPreview>;
+  requestExport(): Promise<PracticeExportSummary>;
+}
+
 export interface CoachInviteApiClient {
   create(input: {
     clientName: string;
@@ -739,5 +795,37 @@ export function createClientLoopApiClient(
     async releaseHold(holdId) {
       await mutate(`/booking/holds/${encodeURIComponent(holdId)}`, 'DELETE');
     },
+  };
+}
+
+export function createCoachDataPortabilityApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): CoachDataPortabilityApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  async function read<T>(path: string): Promise<T> {
+    const response = await request(`${normalizedBaseUrl}/coach${path}`, { credentials: 'include' });
+    return responseJson<T>(response);
+  }
+  async function mutate<T>(path: string, body?: unknown): Promise<T> {
+    const csrf = await csrfFor(normalizedBaseUrl, 'coach', request);
+    const response = await request(`${normalizedBaseUrl}/coach${path}`, {
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include',
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'x-csrf-token': csrf,
+      },
+      method: 'POST',
+    });
+    return responseJson<T>(response);
+  }
+  return {
+    commitClientImport: (input) => mutate('/imports/clients', input),
+    downloadExport: (exportId) => read(`/exports/${encodeURIComponent(exportId)}/download`),
+    listExports: () => read('/exports'),
+    listImports: () => read('/imports'),
+    previewClientImport: (input) => mutate('/imports/clients/preview', input),
+    requestExport: () => mutate('/exports'),
   };
 }

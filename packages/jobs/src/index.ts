@@ -15,12 +15,14 @@ export {
   type EmailDeliveryJob,
   type ResendEmailSender,
 } from './email.js';
+export { parseExportArchiveJob, type ExportArchiveJob } from './export.js';
 
 /** Queue names per Decision D17. */
 export const QUEUES = {
   stripeFlowAWebhooks: 'stripe-flow-a-webhooks',
   stripeFlowBWebhooks: 'stripe-flow-b-webhooks',
   email: 'email',
+  exportArchive: 'export-archive',
   retentionDelete: 'retention-delete',
   transcription: 'transcription',
   videoTranscode: 'video-transcode',
@@ -34,6 +36,7 @@ export const GENERIC_WORKER_QUEUES = [
   QUEUES.stripeFlowAWebhooks,
   QUEUES.stripeFlowBWebhooks,
   QUEUES.email,
+  QUEUES.exportArchive,
   QUEUES.retentionDelete,
   QUEUES.transcription,
 ] as const;
@@ -72,6 +75,7 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Readonly<QueueDefinition>> = [
   { name: QUEUES.stripeFlowAWebhooks, options: DEFAULT_QUEUE_OPTIONS },
   { name: QUEUES.stripeFlowBWebhooks, options: DEFAULT_QUEUE_OPTIONS },
   { name: QUEUES.email, options: DEFAULT_QUEUE_OPTIONS },
+  { name: QUEUES.exportArchive, options: DEFAULT_QUEUE_OPTIONS },
   { name: QUEUES.retentionDelete, options: DEFAULT_QUEUE_OPTIONS },
   { name: QUEUES.transcription, options: DEFAULT_QUEUE_OPTIONS },
   { name: QUEUES.videoTranscode, options: VIDEO_QUEUE_OPTIONS },

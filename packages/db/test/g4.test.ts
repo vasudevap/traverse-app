@@ -1149,6 +1149,130 @@ if (databaseUrl === undefined || databaseUrl === '') {
     assert.equal(metadataState, '42501');
   });
 
+  test('TRA-42 import and export records bind to the requester and preserve import provenance', async () => {
+    const importId = '00000000-0000-7000-8000-000000000501';
+    const exportId = '00000000-0000-7000-8000-000000000502';
+    const relationshipId = '00000000-0000-7000-8000-000000000503';
+    const importedUserId = '00000000-0000-7000-8000-000000000504';
+    const importedClientId = '00000000-0000-7000-8000-000000000505';
+    try {
+      await withRuntimeContext(
+        regularCoachContext(),
+        async (client) => {
+          await client.query(
+            `
+              INSERT INTO app.users (id, email, name, status)
+              VALUES ($1, 'imported@example.test', 'Imported Client', 'imported')
+            `,
+            [importedUserId],
+          );
+          await client.query(
+            `
+              INSERT INTO app.clients (id, user_id, name)
+              VALUES ($1, $2, 'Imported Client')
+            `,
+            [importedClientId, importedUserId],
+          );
+          await client.query(
+            `
+              INSERT INTO app.imports
+                (id, tenant_id, requested_by, source_type, source_ref, status)
+              VALUES ($1, $2, $3, 'csv_clients', 'inline-sha256:test', 'processing')
+            `,
+            [importId, tenantA, coachUserA],
+          );
+          await client.query(
+            `
+              INSERT INTO app.exports (id, tenant_id, requested_by, scope)
+              VALUES ($1, $2, $3, 'everything')
+            `,
+            [exportId, tenantA, coachUserA],
+          );
+          await client.query(
+            `
+              INSERT INTO app.coaching_relationships
+                (
+                  id, tenant_id, coach_id, client_id, status, onboarding_state,
+                  tags, source_import_id
+                )
+              VALUES ($1, $2, $3, $4, 'imported', 'imported', $5, $6)
+            `,
+            [relationshipId, tenantA, regularCoachA, importedClientId, ['leadership'], importId],
+          );
+        },
+        true,
+      );
+
+      const ownerVisible = await withRuntimeContext(ownerContext(), async (client) => {
+        const imports = await client.query<{ id: string }>(
+          'SELECT id FROM app.imports WHERE id = $1',
+          [importId],
+        );
+        const exports = await client.query<{ id: string }>(
+          'SELECT id FROM app.exports WHERE id = $1',
+          [exportId],
+        );
+        return { exports: exports.rows, imports: imports.rows };
+      });
+      assert.deepEqual(ownerVisible, {
+        exports: [{ id: exportId }],
+        imports: [{ id: importId }],
+      });
+
+      const provenance = await withRuntimeContext(regularCoachContext(), async (client) => {
+        const result = await client.query<{ source_import_id: string; tags: string[] }>(
+          'SELECT source_import_id, tags FROM app.coaching_relationships WHERE id = $1',
+          [relationshipId],
+        );
+        return result.rows[0];
+      });
+      assert.deepEqual(provenance, { source_import_id: importId, tags: ['leadership'] });
+
+      const provenanceRewriteState = await withRuntimeContext(regularCoachContext(), (client) =>
+        sqlState(() =>
+          client.query(
+            'UPDATE app.coaching_relationships SET source_import_id = NULL WHERE id = $1',
+            [relationshipId],
+          ),
+        ),
+      );
+      assert.equal(provenanceRewriteState, '42501');
+
+      const spoofedRequesterState = await withRuntimeContext(regularCoachContext(), (client) =>
+        sqlState(() =>
+          client.query(
+            `
+              INSERT INTO app.exports (tenant_id, requested_by, scope)
+              VALUES ($1, $2, 'everything')
+            `,
+            [tenantA, ownerUserA],
+          ),
+        ),
+      );
+      assert.equal(spoofedRequesterState, '42501');
+
+      const clientInsertState = await withRuntimeContext(clientContext(), (client) =>
+        sqlState(() =>
+          client.query(
+            `
+              INSERT INTO app.imports
+                (tenant_id, requested_by, source_type, source_ref, status)
+              VALUES ($1, $2, 'csv_clients', 'inline-sha256:test', 'processing')
+            `,
+            [tenantA, clientUserA],
+          ),
+        ),
+      );
+      assert.equal(clientInsertState, '42501');
+    } finally {
+      await pool.query('DELETE FROM app.coaching_relationships WHERE id = $1', [relationshipId]);
+      await pool.query('DELETE FROM app.exports WHERE id = $1', [exportId]);
+      await pool.query('DELETE FROM app.imports WHERE id = $1', [importId]);
+      await pool.query('DELETE FROM app.clients WHERE id = $1', [importedClientId]);
+      await pool.query('DELETE FROM app.users WHERE id = $1', [importedUserId]);
+    }
+  });
+
   test('coaching relationships cannot be hard-deleted by runtime sessions', async () => {
     const deleteState = await withRuntimeContext(ownerContext(), (client) =>
       sqlState(() =>
