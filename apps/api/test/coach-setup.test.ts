@@ -35,7 +35,7 @@ function initialSetup(): StoredCoachSetup {
     onboardingDefaults: { ...TRAVERSE_ONBOARDING_DEFAULTS },
     plan: {
       code: 'practice',
-      name: 'Practice',
+      name: 'Pro',
       trialEndsAt: new Date('2026-08-01T00:00:00.000Z'),
     },
     policies: { ...TRAVERSE_POLICY_DEFAULTS },

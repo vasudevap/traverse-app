@@ -193,7 +193,7 @@ function assertBoolean(value: unknown, label: string): boolean {
 
 function assertPlan(value: unknown): PlanCode {
   if (typeof value !== 'string' || !PLAN_CODES.includes(value as PlanCode)) {
-    throw new BadRequestException('planCode must be starter, practice, or established.');
+    throw new BadRequestException('planCode must identify a valid billing plan.');
   }
   return value as PlanCode;
 }
@@ -573,7 +573,7 @@ export class DatabaseCoachSignupStore implements CoachSignupStore {
           tenant_id: input.tenantId,
         })
         .executeTakeFirstOrThrow();
-      const starterPlan = await database
+      const billingPlan = await database
         .selectFrom('billing_plans')
         .select('id')
         .where('code', '=', input.planCode)
@@ -581,7 +581,7 @@ export class DatabaseCoachSignupStore implements CoachSignupStore {
       await database
         .insertInto('coach_subscriptions')
         .values({
-          plan_id: starterPlan.id,
+          plan_id: billingPlan.id,
           status: 'trialing',
           stripe_subscription_id: input.stripeSubscriptionId,
           tenant_id: input.tenantId,

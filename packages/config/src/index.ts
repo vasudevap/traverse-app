@@ -3,6 +3,17 @@ export const PLAN_CODES = ['starter', 'practice', 'established'] as const;
 export type PlanCode = (typeof PLAN_CODES)[number];
 
 /**
+ * Customer-facing names for the stable plan identifiers. Use codes for persistence,
+ * pricing configuration, and Stripe price mappings; use these names in display-only
+ * surfaces.
+ */
+export const PLAN_DISPLAY_NAMES: Record<PlanCode, string> = {
+  starter: 'Basic',
+  practice: 'Pro',
+  established: 'Premium',
+};
+
+/**
  * Video message limits per Decision V15. These are **configuration, not constants**:
  * the values below are defaults, overridable via environment and validated at load.
  * Feature code MUST read them through {@link loadVideoConfig}, never hard-code the
