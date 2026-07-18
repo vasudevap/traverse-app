@@ -214,6 +214,9 @@ importers:
 
   apps/video-worker:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1086.0
+        version: 3.1086.0
       '@traverse/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
