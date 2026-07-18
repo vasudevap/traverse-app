@@ -13,13 +13,14 @@ import {
   type QueueName,
 } from '../src/index';
 
-test('queue names remain the complete D17 set', () => {
+test('queue names remain the complete worker set', () => {
   const queueNames: QueueName[] = Object.values(QUEUES);
 
   assert.deepEqual(queueNames, [
     'stripe-flow-a-webhooks',
     'stripe-flow-b-webhooks',
     'email',
+    'export-archive',
     'retention-delete',
     'transcription',
     'video-transcode',
@@ -44,6 +45,7 @@ test('queue definitions create a dedicated dead-letter queue first', async () =>
     QUEUES.stripeFlowAWebhooks,
     QUEUES.stripeFlowBWebhooks,
     QUEUES.email,
+    QUEUES.exportArchive,
     QUEUES.retentionDelete,
     QUEUES.transcription,
   ]);

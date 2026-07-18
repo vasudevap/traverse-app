@@ -53,6 +53,14 @@ import {
   type CoachingLoopStore,
   CoachingLoopService,
 } from './coaching-loop.service.js';
+import { CoachDataPortabilityController } from './data-portability.controller.js';
+import {
+  DATA_PORTABILITY_ASSETS,
+  DATA_PORTABILITY_STORE,
+  type DataPortabilityAssetStore,
+  type DataPortabilityStore,
+  DataPortabilityService,
+} from './data-portability.service.js';
 
 /**
  * Modular monolith root (Decision D18). Domain modules (auth, tenancy, video,
@@ -79,6 +87,10 @@ export class AppModule {
     coachingLoopDependencies: {
       store: CoachingLoopStore;
     },
+    portabilityDependencies: {
+      assets: DataPortabilityAssetStore;
+      store: DataPortabilityStore;
+    },
   ): DynamicModule {
     return {
       module: AppModule,
@@ -91,6 +103,7 @@ export class AppModule {
         ClientOnboardingController,
         CoachCoachingLoopController,
         ClientCoachingLoopController,
+        CoachDataPortabilityController,
         FlowBWebhookController,
         HealthController,
       ],
@@ -105,11 +118,14 @@ export class AppModule {
         { provide: COACH_SETUP_STORE, useValue: setupDependencies.store },
         { provide: CLIENT_ONBOARDING_STORE, useValue: onboardingDependencies.store },
         { provide: COACHING_LOOP_STORE, useValue: coachingLoopDependencies.store },
+        { provide: DATA_PORTABILITY_ASSETS, useValue: portabilityDependencies.assets },
+        { provide: DATA_PORTABILITY_STORE, useValue: portabilityDependencies.store },
         AuthService,
         CoachSetupService,
         CoachSignupService,
         ClientOnboardingService,
         CoachingLoopService,
+        DataPortabilityService,
         AuthenticatedSessionGuard,
         ClientCsrfGuard,
         ClientSessionGuard,

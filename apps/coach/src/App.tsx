@@ -1,16 +1,20 @@
 import {
   ApiResponseError,
+  type ClientImportPreview,
+  type ClientImportSummary,
   type CoachContractSnapshot,
   type CoachLoopDashboard,
   type CoachLoopWorkspace,
   type CoachSetupSnapshot,
   createCoachContractApiClient,
+  createCoachDataPortabilityApiClient,
   createCoachInviteApiClient,
   createCoachLoopApiClient,
   createCoachSetupApiClient,
   type InviteOptions,
   type LoopAppointment,
   type LoopGroup,
+  type PracticeExportSummary,
   type SetupStep,
 } from '@traverse/api-client';
 import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@traverse/ui';
@@ -20,11 +24,13 @@ const setupApi = createCoachSetupApiClient();
 const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
 const loopApi = createCoachLoopApiClient();
+const dataApi = createCoachDataPortabilityApiClient();
 const navigation = [
   { current: true, href: '/', label: 'Dashboard' },
   { href: '/clients', label: 'Clients' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/groups', label: 'Groups' },
+  { href: '/settings/data', label: 'Data' },
 ];
 
 type SetupAction = () => Promise<CoachSetupSnapshot>;
@@ -2356,6 +2362,361 @@ function CoachSetupApp() {
   );
 }
 
+const CLIENT_IMPORT_TEMPLATE =
+  'name,email,notes,tags\nAlex Morgan,alex@example.com,Leadership goals,leadership;executive\n';
+
+function dateLabel(value: string | null): string {
+  if (value === null) return 'Not available';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function byteLabel(value: number | null): string {
+  if (value === null) return '';
+  if (value < 1_024) return `${value} B`;
+  if (value < 1_048_576) return `${(value / 1_024).toFixed(1)} KB`;
+  return `${(value / 1_048_576).toFixed(1)} MB`;
+}
+
+function DataPortabilityPage() {
+  const [csv, setCsv] = useState('');
+  const [filename, setFilename] = useState('');
+  const [preview, setPreview] = useState<ClientImportPreview | null>(null);
+  const [imports, setImports] = useState<ClientImportSummary[]>([]);
+  const [exports, setExports] = useState<PracticeExportSummary[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function refresh() {
+    const [nextImports, nextExports] = await Promise.all([
+      dataApi.listImports(),
+      dataApi.listExports(),
+    ]);
+    setImports(nextImports);
+    setExports(nextExports);
+  }
+
+  useEffect(() => {
+    void refresh().catch((loadError: unknown) => setError(errorMessage(loadError)));
+  }, []);
+
+  useEffect(() => {
+    if (!exports.some((record) => record.status === 'pending' || record.status === 'processing')) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      void dataApi
+        .listExports()
+        .then(setExports)
+        .catch((loadError: unknown) => setError(errorMessage(loadError)));
+    }, 5_000);
+    return () => window.clearInterval(interval);
+  }, [exports]);
+
+  async function run(label: string, action: () => Promise<void>) {
+    setBusy(label);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+    } catch (actionError) {
+      setError(errorMessage(actionError));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function chooseFile(file: File | undefined) {
+    if (file === undefined) return;
+    setFilename(file.name);
+    setPreview(null);
+    setNotice(null);
+    void file
+      .text()
+      .then(setCsv)
+      .catch(() => setError('The CSV file could not be read.'));
+  }
+
+  function previewImport(event: FormEvent) {
+    event.preventDefault();
+    void run('preview', async () => {
+      const result = await dataApi.previewClientImport({ csv, filename });
+      setPreview(result);
+      setNotice(
+        result.validRows === 0
+          ? 'No rows are ready to import yet.'
+          : `${result.validRows} client${result.validRows === 1 ? '' : 's'} ready to import.`,
+      );
+    });
+  }
+
+  function commitImport() {
+    void run('import', async () => {
+      const result = await dataApi.commitClientImport({ csv, filename });
+      setImports((current) => [result, ...current.filter((record) => record.id !== result.id)]);
+      setPreview(null);
+      setCsv('');
+      setFilename('');
+      setNotice(
+        `${result.importedRows ?? 0} client${result.importedRows === 1 ? '' : 's'} imported.`,
+      );
+    });
+  }
+
+  function requestExport() {
+    void run('export', async () => {
+      const result = await dataApi.requestExport();
+      setExports((current) => [result, ...current]);
+      setNotice('Your export is being prepared. We will email you when it is ready.');
+    });
+  }
+
+  function downloadExport(exportId: string) {
+    void run(`download-${exportId}`, async () => {
+      const download = await dataApi.downloadExport(exportId);
+      window.location.assign(download.url);
+    });
+  }
+
+  return (
+    <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+      <PageHeader
+        eyebrow="Data portability"
+        summary="Bring your client list with you, and take your practice data with you whenever you choose."
+        title="Your data, without lock-in"
+      />
+      {error ? (
+        <div className="setup-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="data-notice" role="status">
+          {notice}
+        </div>
+      ) : null}
+
+      <div className="data-portability-grid">
+        <Card className="data-card" tone="editorial">
+          <div className="trv-eyebrow">Bring clients in</div>
+          <h2>Import a client CSV</h2>
+          <p>
+            Preview every row before anything changes. Required columns are name and email; notes
+            and tags are optional. Separate tags with semicolons.
+          </p>
+          <a
+            className="trv-button trv-button--line"
+            download="traverse-client-import-template.csv"
+            href={`data:text/csv;charset=utf-8,${encodeURIComponent(CLIENT_IMPORT_TEMPLATE)}`}
+          >
+            Download CSV template
+          </a>
+          <form className="data-import-form" onSubmit={previewImport}>
+            <Field
+              hint={filename === '' ? 'CSV only, up to 1 MB and 1,000 rows.' : filename}
+              label="Client CSV"
+            >
+              <input
+                accept=".csv,text/csv"
+                className="trv-input"
+                onChange={(event) => chooseFile(event.target.files?.[0])}
+                type="file"
+              />
+            </Field>
+            <Button disabled={csv === '' || busy !== null} type="submit">
+              {busy === 'preview' ? 'Checking file...' : 'Preview import'}
+            </Button>
+          </form>
+          <div className="data-migration-note">
+            <strong>Coming from Practice or Profi?</strong>
+            <span>
+              Use the template for a self-serve import, or ask Traverse for a white-glove mapping
+              review before the file is committed.
+            </span>
+          </div>
+        </Card>
+
+        <Card className="data-card">
+          <div className="trv-eyebrow">Take everything out</div>
+          <h2>Export your practice</h2>
+          <p>
+            Create a ZIP with a checksum manifest and every domain currently available in Traverse.
+            Future video, transcript, invoice, and payment handlers join the same archive as those
+            features launch.
+          </p>
+          <Button disabled={busy !== null} onClick={requestExport} type="button">
+            {busy === 'export' ? 'Starting export...' : 'Export everything'}
+          </Button>
+          <div className="data-trust-list" aria-label="Export safeguards">
+            <span>Encrypted private storage</span>
+            <span>Download link signed for 15 minutes</span>
+            <span>Archive expires after 7 days</span>
+          </div>
+        </Card>
+      </div>
+
+      {preview ? (
+        <section className="data-section" aria-labelledby="import-preview-heading">
+          <div className="data-section__heading">
+            <div>
+              <div className="trv-eyebrow">Nothing imported yet</div>
+              <h2 id="import-preview-heading">Review {preview.filename}</h2>
+            </div>
+            <div className="data-badges">
+              <Badge tone="accent">{preview.validRows} ready</Badge>
+              <Badge tone={preview.rejectedRows > 0 ? 'danger' : 'neutral'}>
+                {preview.rejectedRows} need attention
+              </Badge>
+            </div>
+          </div>
+          <div className="data-preview-table-wrap">
+            <table className="data-preview-table">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Client</th>
+                  <th>Tags</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.map((row) => {
+                  const rowIssues = preview.issues.filter(
+                    (entry) => entry.rowNumber === row.rowNumber,
+                  );
+                  return (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td>
+                        <strong>{row.name || 'Missing name'}</strong>
+                        <span>{row.email || 'Missing email'}</span>
+                      </td>
+                      <td>{row.tags.join(', ') || 'None'}</td>
+                      <td>
+                        {row.valid ? (
+                          <Badge tone="accent">Ready</Badge>
+                        ) : (
+                          rowIssues.map((entry) => (
+                            <span className="data-row-error" key={`${entry.field}-${entry.code}`}>
+                              {entry.message}
+                            </span>
+                          ))
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="data-preview-actions">
+            <Button
+              disabled={preview.validRows === 0 || busy !== null}
+              onClick={commitImport}
+              type="button"
+            >
+              {busy === 'import' ? 'Importing...' : `Import ${preview.validRows} valid clients`}
+            </Button>
+            <span>Rows with errors stay out of Traverse and remain in the report.</span>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="data-history-grid">
+        <section className="data-section" aria-labelledby="import-history-heading">
+          <div className="data-section__heading">
+            <div>
+              <div className="trv-eyebrow">Audit trail</div>
+              <h2 id="import-history-heading">Recent imports</h2>
+            </div>
+          </div>
+          {imports.length === 0 ? (
+            <p>No client imports yet.</p>
+          ) : (
+            <div className="data-history-list">
+              {imports.map((record) => (
+                <div className="data-history-row" key={record.id}>
+                  <div>
+                    <strong>{record.filename ?? 'Client CSV'}</strong>
+                    <span>{dateLabel(record.createdAt)}</span>
+                  </div>
+                  <div>
+                    <Badge tone={record.status === 'ready' ? 'accent' : 'danger'}>
+                      {record.status}
+                    </Badge>
+                    <span>
+                      {record.importedRows ?? 0} imported, {record.rejectedRows ?? 0} rejected
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="data-section" aria-labelledby="export-history-heading">
+          <div className="data-section__heading">
+            <div>
+              <div className="trv-eyebrow">Secure delivery</div>
+              <h2 id="export-history-heading">Recent exports</h2>
+            </div>
+          </div>
+          {exports.length === 0 ? (
+            <p>No practice exports yet.</p>
+          ) : (
+            <div className="data-history-list">
+              {exports.map((record) => (
+                <div className="data-history-row" key={record.id}>
+                  <div>
+                    <strong>Practice export</strong>
+                    <span>
+                      {dateLabel(record.createdAt)} {byteLabel(record.archiveSizeBytes)}
+                    </span>
+                  </div>
+                  <div>
+                    <Badge
+                      tone={
+                        record.status === 'ready'
+                          ? 'accent'
+                          : record.status === 'failed' || record.status === 'expired'
+                            ? 'danger'
+                            : 'neutral'
+                      }
+                    >
+                      {record.status}
+                    </Badge>
+                    {record.status === 'ready' ? (
+                      <Button
+                        disabled={busy !== null}
+                        onClick={() => downloadExport(record.id)}
+                        type="button"
+                        variant="line"
+                      >
+                        {busy === `download-${record.id}` ? 'Signing...' : 'Download ZIP'}
+                      </Button>
+                    ) : (
+                      <span>
+                        {record.status === 'processing' || record.status === 'pending'
+                          ? 'Preparing archive...'
+                          : record.status === 'expired'
+                            ? 'Request a new export.'
+                            : 'Try the export again.'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </AppShell>
+  );
+}
+
 export function App() {
   const { pathname } = window.location;
   const contractMatch = pathname.match(/^\/contracts\/([^/]+)\/sign$/);
@@ -2374,6 +2735,7 @@ export function App() {
   if (pathname === '/calendar') return <LiveCoachLoop focus="calendar" />;
   if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
   if (pathname === '/dashboard') return <LiveCoachLoop focus="dashboard" />;
+  if (pathname === '/settings/data') return <DataPortabilityPage />;
 
   return <CoachSetupApp />;
 }

@@ -1,6 +1,8 @@
 import type { NestApplicationOptions } from '@nestjs/common';
 import { KMSClient } from '@aws-sdk/client-kms';
+import { S3Client } from '@aws-sdk/client-s3';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
   createDatabase,
   databaseConnectionString,
@@ -35,12 +37,23 @@ import {
 import type { ClientOnboardingStore } from './client-onboarding.service.js';
 import { DatabaseCoachingLoopStore, KmsRelationshipNotesCipher } from './coaching-loop-store.js';
 import type { CoachingLoopStore } from './coaching-loop.service.js';
+import {
+  DatabaseDataPortabilityStore,
+  KmsDataPortabilityNotesCipher,
+  S3DataPortabilityAssetStore,
+} from './data-portability-store.js';
+import type {
+  DataPortabilityAssetStore,
+  DataPortabilityStore,
+} from './data-portability.service.js';
 
 export interface AppDependencies {
   allowedOrigins: ReadonlySet<string>;
   authSessionStore: AuthSessionStore;
   clientOnboardingStore?: ClientOnboardingStore;
   coachingLoopStore?: CoachingLoopStore;
+  dataPortabilityAssets?: DataPortabilityAssetStore;
+  dataPortabilityStore?: DataPortabilityStore;
   setupAssetStore?: CoachProfileAssetStore;
   setupStore?: CoachSetupStore;
   signupBillingClient?: FlowBBillingClient;
@@ -121,6 +134,15 @@ const missingCoachingLoopStore = new Proxy({} as CoachingLoopStore, {
       ? undefined
       : async () => missingSignupDependency('coachingLoopStore'),
 });
+const missingDataPortabilityStore = new Proxy({} as DataPortabilityStore, {
+  get: (_target, property) =>
+    nestLifecycleProperties.has(property)
+      ? undefined
+      : async () => missingSignupDependency('dataPortabilityStore'),
+});
+const missingDataPortabilityAssets: DataPortabilityAssetStore = {
+  createDownloadUrl: async () => missingSignupDependency('dataPortabilityAssets'),
+};
 
 async function environmentDependencies(): Promise<AppDependencies> {
   const database = createDatabase({
@@ -140,6 +162,7 @@ async function environmentDependencies(): Promise<AppDependencies> {
   });
   await boss.start();
   const kms = new KMSClient({});
+  const s3 = new S3Client({});
   return {
     allowedOrigins: configuredAllowedOrigins(
       process.env.AUTH_ALLOWED_ORIGINS,
@@ -166,6 +189,12 @@ async function environmentDependencies(): Promise<AppDependencies> {
         emailFrom: process.env.CLIENT_EMAIL_FROM ?? 'Traverse <no-reply@mail.traversecoaching.com>',
       },
     ),
+    dataPortabilityAssets: new S3DataPortabilityAssetStore(s3, assetBucket),
+    dataPortabilityStore: new DatabaseDataPortabilityStore(
+      database,
+      boss,
+      new KmsDataPortabilityNotesCipher(kms),
+    ),
     signupBillingClient: new StripeFlowBBillingClient(process.env.STRIPE_SECRET),
     signupEmailSender: new ResendSignupEmailSender(
       process.env.RESEND_SECRET,
@@ -185,7 +214,7 @@ export async function createApp(
   dependencies?: AppDependencies,
 ) {
   const resolvedDependencies = dependencies ?? (await environmentDependencies());
-  const app = await NestFactory.create(
+  const app = await NestFactory.create<NestExpressApplication>(
     AppModule.register(
       resolvedDependencies.authSessionStore,
       {
@@ -214,9 +243,15 @@ export async function createApp(
       {
         store: resolvedDependencies.coachingLoopStore ?? missingCoachingLoopStore,
       },
+      {
+        assets: resolvedDependencies.dataPortabilityAssets ?? missingDataPortabilityAssets,
+        store: resolvedDependencies.dataPortabilityStore ?? missingDataPortabilityStore,
+      },
     ),
-    { rawBody: true, ...options },
+    { ...options, bodyParser: false, rawBody: true },
   );
+  app.useBodyParser('json', { limit: '3mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '100kb' });
   app.enableCors({
     credentials: true,
     maxAge: 600,

@@ -143,6 +143,13 @@ The API, worker, and video worker receive role-scoped S3 permissions. CloudFront
 read only the video bucket through its exact distribution ARN. The shared KMS policy
 admits CloudFront decrypt requests only from distributions in the same AWS account.
 
+Stage 2 export archives use the private asset bucket under the tenant-scoped
+`exports/<tenant-id>/` prefix. The generic worker can read, write, and delete only that
+prefix in addition to its existing read-only brand-asset access. Objects remain
+SSE-KMS encrypted, application download URLs expire after 15 minutes, export records
+expire after seven days, and the bucket lifecycle removes archive objects after eight
+days as a backstop.
+
 ## TRA-20 ECS services and deployment pipeline
 
 The `compute` module provides a private ARM64 Fargate cluster, immutable KMS-encrypted
