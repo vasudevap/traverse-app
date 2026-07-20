@@ -24,6 +24,13 @@ if (databaseUrl === undefined || databaseUrl === '') {
 } else {
   const pool = new Pool({ connectionString: databaseUrl });
   const database = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
+  const runtimePool = new Pool({
+    connectionString: databaseUrl,
+    options: '-c role=traverse_runtime',
+  });
+  const runtimeDatabase = new Kysely<Database>({
+    dialect: new PostgresDialect({ pool: runtimePool }),
+  });
 
   const tenantA = '00000000-0000-7000-8000-000000000001';
   const tenantB = '00000000-0000-7000-8000-000000000002';
@@ -327,6 +334,7 @@ if (databaseUrl === undefined || databaseUrl === '') {
   });
 
   after(async () => {
+    await runtimeDatabase.destroy();
     await removeFixture();
     await database.destroy();
   });
@@ -359,7 +367,7 @@ if (databaseUrl === undefined || databaseUrl === '') {
   });
 
   test('TRA-29 persists hashed sessions, resolves coach context, and revokes immediately', async () => {
-    const store = new DatabaseAuthSessionStore(database);
+    const store = new DatabaseAuthSessionStore(runtimeDatabase);
     const subject = await store.findSubject('owner-a@example.test', 'coach');
     assert.deepEqual(subject, {
       clientId: null,

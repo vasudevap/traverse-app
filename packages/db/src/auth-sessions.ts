@@ -189,7 +189,7 @@ export class DatabaseAuthSessionStore implements AuthSessionStore {
         ])
         .where('session.token_hash', '=', tokenHash)
         .where('session.role', '=', role)
-        .forUpdate()
+        .forUpdate('session')
         .executeTakeFirst();
 
       if (row === undefined || row.revoked_at !== null || row.status !== 'active') {
