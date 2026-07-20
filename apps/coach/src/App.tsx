@@ -1911,36 +1911,72 @@ function CoachSignIn({
 }
 
 function CoachSignup() {
+  type SignupStep = 'account' | 'agreements' | 'plan';
+  type SignupPlanCode = 'established' | 'practice' | 'starter';
+  const plans: Array<{
+    annual: number;
+    code: SignupPlanCode;
+    detail: string;
+    monthly: number;
+    name: string;
+  }> = [
+    {
+      annual: 190,
+      code: 'starter',
+      detail: '40 clients · 30-day video retention',
+      monthly: 19,
+      name: 'Basic',
+    },
+    {
+      annual: 390,
+      code: 'practice',
+      detail: '75 clients · 180-day video retention',
+      monthly: 39,
+      name: 'Pro',
+    },
+    {
+      annual: 790,
+      code: 'established',
+      detail: 'Unlimited clients · 365-day retention',
+      monthly: 79,
+      name: 'Premium',
+    },
+  ];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resendEmail, setResendEmail] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [step, setStep] = useState<SignupStep>('plan');
+  const [planCode, setPlanCode] = useState<SignupPlanCode>('practice');
+  const [billingInterval, setBillingInterval] = useState<'annual' | 'monthly'>('monthly');
+  const [discipline, setDiscipline] = useState('');
   const [disciplineBand, setDisciplineBand] = useState<'permitted' | 'restricted'>('permitted');
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [acceptableUseAccepted, setAcceptableUseAccepted] = useState(false);
+  const [restrictedCredentialAttestation, setRestrictedCredentialAttestation] = useState(false);
+  const [restrictedNonClinicalAttestation, setRestrictedNonClinicalAttestation] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
-    const selectedPlan = form.get('plan');
-    const planCode =
-      selectedPlan === 'starter' || selectedPlan === 'established' ? selectedPlan : 'practice';
     setBusy(true);
     setError(null);
     setResendEmail(null);
     try {
       await signupApi.create({
-        acceptableUseAccepted: form.get('acceptable-use') === 'on',
-        billingInterval: form.get('billing-interval') === 'annual' ? 'annual' : 'monthly',
-        discipline: String(form.get('discipline') ?? '').trim(),
+        acceptableUseAccepted,
+        billingInterval,
+        discipline,
         disciplineBand,
         email,
-        legalAccepted: form.get('terms') === 'on',
+        legalAccepted,
         name: String(form.get('name') ?? '').trim(),
         password: String(form.get('password') ?? ''),
         planCode,
         practiceName: String(form.get('practice-name') ?? '').trim(),
-        restrictedCredentialAttestation: form.get('restricted-credential') === 'on',
-        restrictedNonClinicalAttestation: form.get('restricted-non-clinical') === 'on',
+        restrictedCredentialAttestation,
+        restrictedNonClinicalAttestation,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setSubmittedEmail(email);
@@ -1952,6 +1988,12 @@ function CoachSignup() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function continueFromAgreements(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStep('account');
   }
 
   async function resendVerification() {
@@ -1985,12 +2027,14 @@ function CoachSignup() {
   }
 
   return (
-    <main className="load-state coach-access">
+    <main className="load-state coach-access coach-access--wide">
       <span className="trv-wordmark">Traverse</span>
       <Card>
-        <div className="trv-eyebrow">Coach account</div>
-        <h1>Start your practice.</h1>
-        <p>Create your account, verify your email, then begin your 14-day trial.</p>
+        <div className="coach-access__progress" aria-label="Signup progress">
+          <span className={step === 'plan' ? 'is-current' : ''}>1 Plan</span>
+          <span className={step === 'agreements' ? 'is-current' : ''}>2 Agreements</span>
+          <span className={step === 'account' ? 'is-current' : ''}>3 Account</span>
+        </div>
         {error ? (
           <div className="setup-alert" role="alert">
             {error}
@@ -2001,78 +2045,169 @@ function CoachSignup() {
             {busy ? 'Sending verification email...' : 'Resend verification email'}
           </Button>
         ) : null}
-        <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
-          <Field label="Your name">
-            <TextInput name="name" required />
-          </Field>
-          <Field label="Practice name">
-            <TextInput name="practice-name" required />
-          </Field>
-          <Field label="Email address">
-            <TextInput autoComplete="email" name="email" required type="email" />
-          </Field>
-          <Field label="Password">
-            <TextInput
-              autoComplete="new-password"
-              minLength={12}
-              name="password"
-              required
-              type="password"
-            />
-          </Field>
-          <Field label="Coaching discipline">
-            <TextInput name="discipline" required />
-          </Field>
-          <label className="coach-access__choice">
-            Discipline category
-            <select
-              onChange={(event) =>
-                setDisciplineBand(event.target.value as 'permitted' | 'restricted')
-              }
-              value={disciplineBand}
-            >
-              <option value="permitted">Permitted coaching</option>
-              <option value="restricted">Restricted coaching</option>
-            </select>
-          </label>
-          {disciplineBand === 'restricted' ? (
-            <>
-              <label className="coach-access__check">
-                <input name="restricted-credential" required type="checkbox" /> I hold the required
-                professional credentials.
-              </label>
-              <label className="coach-access__check">
-                <input name="restricted-non-clinical" required type="checkbox" /> I will not use
-                Traverse for clinical care.
-              </label>
-            </>
-          ) : null}
-          <label className="coach-access__choice">
-            Plan
-            <select defaultValue="practice" name="plan">
-              <option value="starter">Basic</option>
-              <option value="practice">Pro</option>
-              <option value="established">Premium</option>
-            </select>
-          </label>
-          <label className="coach-access__choice">
-            Billing interval
-            <select defaultValue="monthly" name="billing-interval">
-              <option value="monthly">Monthly</option>
-              <option value="annual">Annual</option>
-            </select>
-          </label>
-          <label className="coach-access__check">
-            <input name="terms" required type="checkbox" /> I accept the Coach Terms.
-          </label>
-          <label className="coach-access__check">
-            <input name="acceptable-use" required type="checkbox" /> I accept the Acceptable Use
-            Policy.
-          </label>
-          <Button disabled={busy} type="submit">
-            {busy ? 'Creating account...' : 'Create account'}
-          </Button>
-        </form>
+        {step === 'plan' ? (
+          <section>
+            <div className="trv-eyebrow">Choose your plan</div>
+            <h1>Start with 14 days free.</h1>
+            <p>
+              No card today. Add a payment method and confirm your plan before paid access begins.
+            </p>
+            <div className="coach-access__interval" role="group" aria-label="Billing interval">
+              <button
+                className={billingInterval === 'monthly' ? 'is-selected' : ''}
+                onClick={() => setBillingInterval('monthly')}
+                type="button"
+              >
+                Monthly
+              </button>
+              <button
+                className={billingInterval === 'annual' ? 'is-selected' : ''}
+                onClick={() => setBillingInterval('annual')}
+                type="button"
+              >
+                Annual · two months free
+              </button>
+            </div>
+            <div className="coach-access__plans">
+              {plans.map((plan) => (
+                <button
+                  className={
+                    planCode === plan.code ? 'coach-access__plan is-selected' : 'coach-access__plan'
+                  }
+                  key={plan.code}
+                  onClick={() => setPlanCode(plan.code)}
+                  type="button"
+                >
+                  <strong>{plan.name}</strong>
+                  <span className="coach-access__price">
+                    ${billingInterval === 'monthly' ? plan.monthly : plan.annual}
+                    <small> USD/{billingInterval === 'monthly' ? 'month' : 'year'}</small>
+                  </span>
+                  <span>{plan.detail}</span>
+                  {plan.code === 'practice' ? <em>Most popular</em> : null}
+                </button>
+              ))}
+            </div>
+            <Button onClick={() => setStep('agreements')} type="button">
+              Continue with {plans.find((plan) => plan.code === planCode)?.name}
+            </Button>
+          </section>
+        ) : null}
+        {step === 'agreements' ? (
+          <form className="coach-access__form" onSubmit={continueFromAgreements}>
+            <div className="trv-eyebrow">Agreements and acceptable use</div>
+            <h1>Confirm how you coach.</h1>
+            <Field label="Primary coaching discipline">
+              <TextInput
+                onChange={(event) => setDiscipline(event.target.value)}
+                required
+                value={discipline}
+              />
+            </Field>
+            <label className="coach-access__choice">
+              Discipline category
+              <select
+                onChange={(event) =>
+                  setDisciplineBand(event.target.value as 'permitted' | 'restricted')
+                }
+                value={disciplineBand}
+              >
+                <option value="permitted">Permitted coaching</option>
+                <option value="restricted">Restricted coaching</option>
+              </select>
+            </label>
+            {disciplineBand === 'restricted' ? (
+              <>
+                <label className="coach-access__check">
+                  <input
+                    checked={restrictedNonClinicalAttestation}
+                    onChange={(event) => setRestrictedNonClinicalAttestation(event.target.checked)}
+                    required
+                    type="checkbox"
+                  />{' '}
+                  My services are educational and non-clinical / non-advisory.
+                </label>
+                <label className="coach-access__check">
+                  <input
+                    checked={restrictedCredentialAttestation}
+                    onChange={(event) => setRestrictedCredentialAttestation(event.target.checked)}
+                    required
+                    type="checkbox"
+                  />{' '}
+                  I hold any credential or licence my jurisdiction requires.
+                </label>
+              </>
+            ) : null}
+            <label className="coach-access__check">
+              <input
+                checked={acceptableUseAccepted}
+                onChange={(event) => setAcceptableUseAccepted(event.target.checked)}
+                required
+                type="checkbox"
+              />{' '}
+              I will not use Traverse for licensed clinical, medical, mental-health, or regulated
+              financial or legal services. I am responsible for the lawfulness and suitability of my
+              coaching.
+            </label>
+            <label className="coach-access__check">
+              <input
+                checked={legalAccepted}
+                onChange={(event) => setLegalAccepted(event.target.checked)}
+                required
+                type="checkbox"
+              />{' '}
+              I have read and agree to the Coach Terms, Acceptable Use Policy, Privacy Policy, and
+              Payment Terms.
+            </label>
+            <p className="coach-access__legal-note">
+              Agreement links and counsel-approved versions must be published before real-user
+              launch.
+            </p>
+            <div className="coach-access__actions">
+              <button className="coach-access__back" onClick={() => setStep('plan')} type="button">
+                Back
+              </button>
+              <Button type="submit">Continue to account</Button>
+            </div>
+          </form>
+        ) : null}
+        {step === 'account' ? (
+          <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
+            <div className="trv-eyebrow">Create your practice</div>
+            <h1>Set up your {plans.find((plan) => plan.code === planCode)?.name} trial.</h1>
+            <p>Verify your email to start the 14-day trial. No card is required today.</p>
+            <Field label="Your name">
+              <TextInput name="name" required />
+            </Field>
+            <Field label="Practice name">
+              <TextInput name="practice-name" required />
+            </Field>
+            <Field label="Email address">
+              <TextInput autoComplete="email" name="email" required type="email" />
+            </Field>
+            <Field label="Password" hint="At least 12 characters">
+              <TextInput
+                autoComplete="new-password"
+                minLength={12}
+                name="password"
+                required
+                type="password"
+              />
+            </Field>
+            <div className="coach-access__actions">
+              <button
+                className="coach-access__back"
+                onClick={() => setStep('agreements')}
+                type="button"
+              >
+                Back
+              </button>
+              <Button disabled={busy} type="submit">
+                {busy ? 'Creating account...' : 'Create practice'}
+              </Button>
+            </div>
+          </form>
+        ) : null}
         <p className="coach-access__help">
           Already have an account? <a href="/">Sign in</a>
         </p>
