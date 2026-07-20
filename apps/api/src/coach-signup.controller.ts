@@ -38,4 +38,10 @@ export class CoachSignupController {
   async verify(@Body() body: { token?: unknown }) {
     return this.signupService.verifyEmail(body.token);
   }
+
+  @Post('resend-verification')
+  @UseGuards(CoachSignupCsrfGuard)
+  async resendVerification(@Body() body: { email?: unknown }) {
+    return this.signupService.resendVerificationEmail(body.email);
+  }
 }

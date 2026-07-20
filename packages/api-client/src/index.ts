@@ -470,6 +470,7 @@ export interface AuthApiClient {
 
 export interface CoachSignupApiClient {
   create(input: CoachSignupInput): Promise<CoachSignupResult>;
+  resendVerificationEmail(email: string): Promise<{ status: 'pending_verification' }>;
   verifyEmail(token: string): Promise<CoachSignupVerificationResult>;
 }
 
@@ -676,6 +677,16 @@ export function createCoachSignupApiClient(
         method: 'POST',
       });
       return responseJson<CoachSignupVerificationResult>(response);
+    },
+    async resendVerificationEmail(email) {
+      const csrf = await csrfToken();
+      const response = await request(`${signupUrl}/resend-verification`, {
+        body: JSON.stringify({ email }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+        method: 'POST',
+      });
+      return responseJson<{ status: 'pending_verification' }>(response);
     },
   };
 }

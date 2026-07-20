@@ -126,6 +126,12 @@ export interface CoachSignupStore {
   activateVerifiedSignup(input: ActivateSignupInput): Promise<void>;
   createPendingSignup(input: SignupRecordInput): Promise<void>;
   findPendingVerification(tokenHash: Buffer, now: Date): Promise<PendingVerification | undefined>;
+  renewPendingVerification(
+    email: string,
+    tokenHash: Buffer,
+    tokenExpiresAt: Date,
+    now: Date,
+  ): Promise<PendingVerification | undefined>;
   recordFlowBWebhookEvent(event: FlowBWebhookEvent): Promise<boolean>;
   updateSubscriptionFromWebhook(event: FlowBWebhookEvent): Promise<void>;
 }
@@ -370,6 +376,26 @@ export class CoachSignupService {
     };
   }
 
+  async resendVerificationEmail(emailInput: unknown): Promise<{ status: 'pending_verification' }> {
+    const email = normalizeEmail(emailInput);
+    const token = createOpaqueToken();
+    const pending = await this.store.renewPendingVerification(
+      email,
+      hashOpaqueToken(token),
+      new Date(Date.now() + 24 * 60 * 60 * 1000),
+      new Date(),
+    );
+    if (pending !== undefined) {
+      await this.emailSender.sendVerificationEmail({
+        email: pending.email,
+        name: pending.name,
+        tenantId: pending.tenantId,
+        token,
+      });
+    }
+    return { status: 'pending_verification' };
+  }
+
   async handleFlowBWebhook(
     payload: unknown,
     signature: string | undefined,
@@ -529,6 +555,47 @@ export class DatabaseCoachSignupStore implements CoachSignupStore {
       tenantId: metadataString(metadata.tenantId, 'tenantId'),
       userId: row.user_id,
     };
+  }
+
+  async renewPendingVerification(
+    email: string,
+    tokenHash: Buffer,
+    tokenExpiresAt: Date,
+    now: Date,
+  ): Promise<PendingVerification | undefined> {
+    return this.database.transaction().execute(async (transaction) => {
+      const database = transaction.withSchema('app');
+      const row = await database
+        .selectFrom('auth_tokens as token')
+        .innerJoin('users as user', 'user.id', 'token.user_id')
+        .select(['token.id', 'token.metadata', 'token.user_id', 'user.email', 'user.name'])
+        .where('user.email', '=', email)
+        .where('token.purpose', '=', 'email_verify')
+        .where('token.used_at', 'is', null)
+        .where('token.expires_at', '>', now)
+        .where('user.status', '=', 'pending_verification')
+        .executeTakeFirst();
+      if (row === undefined) return undefined;
+      await database
+        .updateTable('auth_tokens')
+        .set({ expires_at: tokenExpiresAt, token_hash: tokenHash })
+        .where('id', '=', row.id)
+        .executeTakeFirstOrThrow();
+      const metadata = row.metadata as Record<string, unknown>;
+      return {
+        billingInterval: metadataString(metadata.billingInterval, 'billingInterval') as BillingInterval,
+        coachId: metadataString(metadata.coachId, 'coachId'),
+        email: row.email,
+        name: row.name,
+        planCode: metadataString(metadata.planCode, 'planCode') as PlanCode,
+        promotionCode:
+          typeof metadata.promotionCode === 'string' && metadata.promotionCode.trim() !== ''
+            ? metadata.promotionCode
+            : null,
+        tenantId: metadataString(metadata.tenantId, 'tenantId'),
+        userId: row.user_id,
+      };
+    });
   }
 
   async activateVerifiedSignup(input: ActivateSignupInput): Promise<void> {

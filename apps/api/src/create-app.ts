@@ -84,6 +84,7 @@ const missingSignupStore: CoachSignupStore = {
   activateVerifiedSignup: async () => missingSignupDependency('signupStore'),
   createPendingSignup: async () => missingSignupDependency('signupStore'),
   findPendingVerification: async () => missingSignupDependency('signupStore'),
+  renewPendingVerification: async () => missingSignupDependency('signupStore'),
   recordFlowBWebhookEvent: async () => missingSignupDependency('signupStore'),
   updateSubscriptionFromWebhook: async () => missingSignupDependency('signupStore'),
 };
