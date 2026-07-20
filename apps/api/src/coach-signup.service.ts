@@ -583,7 +583,10 @@ export class DatabaseCoachSignupStore implements CoachSignupStore {
         .executeTakeFirstOrThrow();
       const metadata = row.metadata as Record<string, unknown>;
       return {
-        billingInterval: metadataString(metadata.billingInterval, 'billingInterval') as BillingInterval,
+        billingInterval: metadataString(
+          metadata.billingInterval,
+          'billingInterval',
+        ) as BillingInterval,
         coachId: metadataString(metadata.coachId, 'coachId'),
         email: row.email,
         name: row.name,
