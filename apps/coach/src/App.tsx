@@ -44,6 +44,13 @@ function errorMessage(error: unknown): string {
   return 'Something went wrong. Your saved work is still safe. Please try again.';
 }
 
+function signupErrorMessage(error: unknown): string {
+  if (error instanceof ApiResponseError && error.status >= 500) {
+    return 'We could not send your verification email. Please try again shortly.';
+  }
+  return errorMessage(error);
+}
+
 function daysRemaining(trialEndsAt: string): number {
   const difference = new Date(trialEndsAt).getTime() - Date.now();
   return Math.max(0, Math.ceil(difference / (24 * 60 * 60 * 1000)));
@@ -1936,7 +1943,7 @@ function CoachSignup() {
       });
       setSubmittedEmail(email);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(signupErrorMessage(caught));
     } finally {
       setBusy(false);
     }
