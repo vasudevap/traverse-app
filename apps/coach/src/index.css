@@ -601,6 +601,125 @@
   width: min(100%, 440px);
 }
 
+.coach-access--wide .trv-card {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.coach-access--wide {
+  place-content: start center;
+}
+
+.coach-access__progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  color: var(--trv-text-secondary);
+  font-size: 12px;
+}
+
+.coach-access__progress span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--trv-surface-panel);
+}
+
+.coach-access__progress .is-current {
+  background: var(--trv-surface-trust);
+  color: white;
+}
+
+.coach-access__interval {
+  display: inline-flex;
+  gap: 4px;
+  margin: 12px 0 20px;
+  padding: 4px;
+  border: 1px solid var(--trv-line);
+  border-radius: 999px;
+}
+
+.coach-access__interval button,
+.coach-access__back {
+  border: 0;
+  background: transparent;
+  color: var(--trv-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.coach-access__interval button {
+  padding: 7px 12px;
+  border-radius: 999px;
+}
+
+.coach-access__interval .is-selected {
+  background: var(--trv-surface-trust);
+  color: white;
+}
+
+.coach-access__plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.coach-access__plan {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-height: 170px;
+  padding: 18px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface);
+  color: var(--trv-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.coach-access__plan.is-selected {
+  border-color: var(--trv-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trv-accent) 18%, transparent);
+}
+
+.coach-access__plan em {
+  color: var(--trv-accent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.coach-access__price {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 26px;
+}
+
+.coach-access__price small {
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.coach-access__legal-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--trv-mark);
+  background: var(--trv-surface-panel);
+  font-size: 12px;
+}
+
+.coach-access__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coach-access__back {
+  padding: 10px 0;
+  text-decoration: underline;
+}
+
 .coach-access__form {
   display: grid;
   gap: 16px;
@@ -636,6 +755,10 @@
 }
 
 @media (max-width: 900px) {
+  .coach-access__plans {
+    grid-template-columns: 1fr;
+  }
+
   .setup-layout {
     grid-template-columns: 1fr;
     gap: 24px;
