@@ -597,6 +597,21 @@
   color: var(--trv-text-secondary);
 }
 
+.coach-access .trv-card {
+  width: min(100%, 440px);
+}
+
+.coach-access__form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.coach-access__help {
+  margin-top: 20px;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .setup-layout {
     grid-template-columns: 1fr;

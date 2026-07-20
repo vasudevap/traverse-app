@@ -6,6 +6,7 @@ import {
   type CoachLoopDashboard,
   type CoachLoopWorkspace,
   type CoachSetupSnapshot,
+  createAuthApiClient,
   createCoachContractApiClient,
   createCoachDataPortabilityApiClient,
   createCoachInviteApiClient,
@@ -21,6 +22,7 @@ import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@tr
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 const setupApi = createCoachSetupApiClient();
+const authApi = createAuthApiClient();
 const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
 const loopApi = createCoachLoopApiClient();
@@ -1837,6 +1839,68 @@ function LoadError({ error, onRetry }: { error: string; onRetry(): void }) {
   );
 }
 
+function CoachSignIn({
+  busy,
+  error,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  onSubmit(email: string, password: string): void;
+}) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    onSubmit(email, password);
+  }
+
+  return (
+    <main className="load-state coach-access">
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach app</div>
+        <h1>Welcome back.</h1>
+        <p>Sign in to continue setting up your practice and supporting your clients.</p>
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <form className="coach-access__form" onSubmit={submit}>
+          <Field label="Email address">
+            <TextInput
+              autoComplete="email"
+              disabled={busy}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </Field>
+          <Field label="Password">
+            <TextInput
+              autoComplete="current-password"
+              disabled={busy}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              type="password"
+              value={password}
+            />
+          </Field>
+          <Button disabled={busy} type="submit">
+            {busy ? 'Signing in...' : 'Sign in'}
+          </Button>
+        </form>
+        <p className="coach-access__help">
+          New to Traverse? Use the account-creation link from your coach onboarding email.
+        </p>
+      </Card>
+    </main>
+  );
+}
+
 function CoachContractSignaturePage({ contractId }: { contractId: string }) {
   const [contract, setContract] = useState<CoachContractSnapshot | null>(null);
   const [signerName, setSignerName] = useState('');
@@ -2216,15 +2280,40 @@ function CoachSetupApp() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [signInRequired, setSignInRequired] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   async function load() {
     setLoadError(null);
     try {
+      await authApi.currentSession('coach');
       const loaded = await setupApi.current();
       setSnapshot(loaded);
       setActiveStep(loaded.nextStep);
     } catch (caught) {
+      if (caught instanceof ApiResponseError && caught.status === 401) {
+        setSignInRequired(true);
+        return;
+      }
       setLoadError(errorMessage(caught));
+    }
+  }
+
+  async function signIn(email: string, password: string) {
+    setBusy(true);
+    setSignInError(null);
+    try {
+      await authApi.login('coach', email, password);
+      setSignInRequired(false);
+      await load();
+    } catch (caught) {
+      setSignInError(
+        caught instanceof ApiResponseError && caught.status === 401
+          ? "We couldn't sign you in with those details."
+          : errorMessage(caught),
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -2249,6 +2338,15 @@ function CoachSetupApp() {
     [],
   );
 
+  if (signInRequired) {
+    return (
+      <CoachSignIn
+        busy={busy}
+        error={signInError}
+        onSubmit={(email, password) => void signIn(email, password)}
+      />
+    );
+  }
   if (loadError !== null) return <LoadError error={loadError} onRetry={() => void load()} />;
   if (snapshot === null) {
     return (
