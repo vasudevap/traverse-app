@@ -199,7 +199,7 @@ async function environmentDependencies(): Promise<AppDependencies> {
     signupEmailSender: new ResendSignupEmailSender(
       process.env.RESEND_SECRET,
       appBaseUrl,
-      process.env.SIGNUP_EMAIL_FROM ?? 'Traverse <hello@traversecoaching.com>',
+      process.env.SIGNUP_EMAIL_FROM ?? 'Traverse <hello@mail.traversecoaching.com>',
     ),
     signupStore: new DatabaseCoachSignupStore(database),
     setupAssetStore: new S3CoachProfileAssetStore({ bucket: assetBucket, kmsKeyId }),
