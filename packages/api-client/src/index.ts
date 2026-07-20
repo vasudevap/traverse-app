@@ -1,5 +1,20 @@
 /** Typed API client for the four SPAs. Fleshed out alongside apps/api routes (P3-B). */
-export const API_BASE_DEFAULT = '/api';
+function defaultApiBase(): string {
+  if (typeof window === 'undefined') return '/api';
+
+  const hostname = window.location.hostname;
+  if (
+    hostname === 'staging-app.traversecoaching.com' ||
+    hostname === 'staging-client.traversecoaching.com'
+  ) {
+    return 'https://staging-api.traversecoaching.com';
+  }
+  if (hostname.endsWith('.traversecoaching.com')) return 'https://api.traversecoaching.com';
+
+  return '/api';
+}
+
+export const API_BASE_DEFAULT = defaultApiBase();
 
 export type AuthRole = 'admin' | 'billingAdmin' | 'client' | 'coach';
 export type AuthSurface = 'admin' | 'billing' | 'client' | 'coach';
