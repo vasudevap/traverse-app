@@ -39,6 +39,10 @@ class FakeStore implements CoachSignupStore {
     };
   }
 
+  async renewPendingVerification(): Promise<PendingVerification | undefined> {
+    return this.findPendingVerification();
+  }
+
   async activateVerifiedSignup(input: ActivateSignupInput): Promise<void> {
     this.activated = input;
   }
@@ -184,6 +188,16 @@ test('TRA-38 email verification starts the card-optional Flow B trial', async ()
   assert.equal(result.stripeSubscriptionId, 'sub_test');
   assert.equal(setup.store.activated?.planCode, 'established');
   assert.equal(setup.store.activated?.stripeCustomerId, 'cus_test');
+});
+
+test('TRA-90 resends verification for a pending signup', async () => {
+  const setup = service();
+  await setup.service.createSignup(validSignup(), { ip: null, userAgent: null });
+  const firstToken = setup.email.verificationToken;
+  const result = await setup.service.resendVerificationEmail('coach@example.test');
+
+  assert.equal(result.status, 'pending_verification');
+  assert.notEqual(setup.email.verificationToken, firstToken);
 });
 
 test('TRA-38 Flow B webhook handling is idempotent', async () => {

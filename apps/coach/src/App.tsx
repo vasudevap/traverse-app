@@ -1913,6 +1913,7 @@ function CoachSignIn({
 function CoachSignup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendEmail, setResendEmail] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [disciplineBand, setDisciplineBand] = useState<'permitted' | 'restricted'>('permitted');
 
@@ -1925,6 +1926,7 @@ function CoachSignup() {
       selectedPlan === 'starter' || selectedPlan === 'established' ? selectedPlan : 'practice';
     setBusy(true);
     setError(null);
+    setResendEmail(null);
     try {
       await signupApi.create({
         acceptableUseAccepted: form.get('acceptable-use') === 'on',
@@ -1944,6 +1946,23 @@ function CoachSignup() {
       setSubmittedEmail(email);
     } catch (caught) {
       setError(signupErrorMessage(caught));
+      if (caught instanceof ApiResponseError && caught.status === 409) {
+        setResendEmail(email);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (resendEmail === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await signupApi.resendVerificationEmail(resendEmail);
+      setSubmittedEmail(resendEmail);
+    } catch (caught) {
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -1976,6 +1995,11 @@ function CoachSignup() {
           <div className="setup-alert" role="alert">
             {error}
           </div>
+        ) : null}
+        {resendEmail !== null ? (
+          <Button disabled={busy} onClick={() => void resendVerification()} type="button">
+            {busy ? 'Sending verification email...' : 'Resend verification email'}
+          </Button>
         ) : null}
         <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
           <Field label="Your name">
