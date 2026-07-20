@@ -468,6 +468,40 @@ export interface AuthApiClient {
   logout(surface: AuthSurface, csrfToken: string): Promise<void>;
 }
 
+export interface CoachSignupApiClient {
+  create(input: CoachSignupInput): Promise<CoachSignupResult>;
+  verifyEmail(token: string): Promise<CoachSignupVerificationResult>;
+}
+
+export interface CoachSignupInput {
+  acceptableUseAccepted: boolean;
+  billingInterval: 'annual' | 'monthly';
+  discipline: string;
+  disciplineBand: 'permitted' | 'restricted';
+  email: string;
+  legalAccepted: boolean;
+  name: string;
+  password: string;
+  planCode: 'starter' | 'practice' | 'established';
+  practiceName: string;
+  restrictedCredentialAttestation?: boolean;
+  restrictedNonClinicalAttestation?: boolean;
+  timezone?: string;
+}
+
+export interface CoachSignupResult {
+  email: string;
+  status: 'pending_verification';
+  tenantId: string;
+}
+
+export interface CoachSignupVerificationResult {
+  status: 'active';
+  stripeSubscriptionId: string;
+  tenantId: string;
+  trialEndsAt: string;
+}
+
 async function responseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message: string | undefined;
@@ -599,6 +633,49 @@ export function createAuthApiClient(
       if (!response.ok) {
         throw new ApiResponseError(response.status);
       }
+    },
+  };
+}
+
+export function createCoachSignupApiClient(
+  baseUrl = API_BASE_DEFAULT,
+  request: typeof fetch = globalThis.fetch,
+): CoachSignupApiClient {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  const signupUrl = `${normalizedBaseUrl}/coach/signup`;
+
+  async function csrfToken(): Promise<string> {
+    const response = await request(`${normalizedBaseUrl}/coach/auth/csrf`, {
+      credentials: 'include',
+    });
+    return (await responseJson<{ csrfToken: string }>(response)).csrfToken;
+  }
+
+  return {
+    async create(input) {
+      const csrf = await csrfToken();
+      const response = await request(signupUrl, {
+        body: JSON.stringify({
+          ...input,
+          acceptedLegalDocuments: [
+            { documentType: 'coach_terms', version: '0.1-in-review' },
+            { documentType: 'acceptable_use_policy', version: '0.1-in-review' },
+          ],
+        }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+        method: 'POST',
+      });
+      return responseJson<CoachSignupResult>(response);
+    },
+    async verifyEmail(token) {
+      const response = await request(`${signupUrl}/verify`, {
+        body: JSON.stringify({ token }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      return responseJson<CoachSignupVerificationResult>(response);
     },
   };
 }

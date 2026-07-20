@@ -11,6 +11,7 @@ import {
   createCoachDataPortabilityApiClient,
   createCoachInviteApiClient,
   createCoachLoopApiClient,
+  createCoachSignupApiClient,
   createCoachSetupApiClient,
   type InviteOptions,
   type LoopAppointment,
@@ -23,6 +24,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 
 const setupApi = createCoachSetupApiClient();
 const authApi = createAuthApiClient();
+const signupApi = createCoachSignupApiClient();
 const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
 const loopApi = createCoachLoopApiClient();
@@ -1894,8 +1896,192 @@ function CoachSignIn({
           </Button>
         </form>
         <p className="coach-access__help">
-          New to Traverse? Use the account-creation link from your coach onboarding email.
+          New to Traverse? <a href="/signup">Create your coach account.</a>
         </p>
+      </Card>
+    </main>
+  );
+}
+
+function CoachSignup() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [disciplineBand, setDisciplineBand] = useState<'permitted' | 'restricted'>('permitted');
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const email = String(form.get('email') ?? '').trim();
+    const selectedPlan = form.get('plan');
+    const planCode =
+      selectedPlan === 'starter' || selectedPlan === 'established' ? selectedPlan : 'practice';
+    setBusy(true);
+    setError(null);
+    try {
+      await signupApi.create({
+        acceptableUseAccepted: form.get('acceptable-use') === 'on',
+        billingInterval: form.get('billing-interval') === 'annual' ? 'annual' : 'monthly',
+        discipline: String(form.get('discipline') ?? '').trim(),
+        disciplineBand,
+        email,
+        legalAccepted: form.get('terms') === 'on',
+        name: String(form.get('name') ?? '').trim(),
+        password: String(form.get('password') ?? ''),
+        planCode,
+        practiceName: String(form.get('practice-name') ?? '').trim(),
+        restrictedCredentialAttestation: form.get('restricted-credential') === 'on',
+        restrictedNonClinicalAttestation: form.get('restricted-non-clinical') === 'on',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      setSubmittedEmail(email);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (submittedEmail !== null) {
+    return (
+      <main className="load-state coach-access">
+        <span className="trv-wordmark">Traverse</span>
+        <Card>
+          <div className="trv-eyebrow">Coach account</div>
+          <h1>Check your email.</h1>
+          <p>We sent a verification link to {submittedEmail}. Open it to start your trial.</p>
+          <p className="coach-access__help">
+            <a href="/">Return to sign in</a>
+          </p>
+        </Card>
+      </main>
+    );
+  }
+
+  return (
+    <main className="load-state coach-access">
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach account</div>
+        <h1>Start your practice.</h1>
+        <p>Create your account, verify your email, then begin your 14-day trial.</p>
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
+          <Field label="Your name">
+            <TextInput name="name" required />
+          </Field>
+          <Field label="Practice name">
+            <TextInput name="practice-name" required />
+          </Field>
+          <Field label="Email address">
+            <TextInput autoComplete="email" name="email" required type="email" />
+          </Field>
+          <Field label="Password">
+            <TextInput
+              autoComplete="new-password"
+              minLength={12}
+              name="password"
+              required
+              type="password"
+            />
+          </Field>
+          <Field label="Coaching discipline">
+            <TextInput name="discipline" required />
+          </Field>
+          <label className="coach-access__choice">
+            Discipline category
+            <select
+              onChange={(event) =>
+                setDisciplineBand(event.target.value as 'permitted' | 'restricted')
+              }
+              value={disciplineBand}
+            >
+              <option value="permitted">Permitted coaching</option>
+              <option value="restricted">Restricted coaching</option>
+            </select>
+          </label>
+          {disciplineBand === 'restricted' ? (
+            <>
+              <label className="coach-access__check">
+                <input name="restricted-credential" required type="checkbox" /> I hold the required
+                professional credentials.
+              </label>
+              <label className="coach-access__check">
+                <input name="restricted-non-clinical" required type="checkbox" /> I will not use
+                Traverse for clinical care.
+              </label>
+            </>
+          ) : null}
+          <label className="coach-access__choice">
+            Plan
+            <select defaultValue="practice" name="plan">
+              <option value="starter">Basic</option>
+              <option value="practice">Pro</option>
+              <option value="established">Premium</option>
+            </select>
+          </label>
+          <label className="coach-access__choice">
+            Billing interval
+            <select defaultValue="monthly" name="billing-interval">
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </label>
+          <label className="coach-access__check">
+            <input name="terms" required type="checkbox" /> I accept the Coach Terms.
+          </label>
+          <label className="coach-access__check">
+            <input name="acceptable-use" required type="checkbox" /> I accept the Acceptable Use
+            Policy.
+          </label>
+          <Button disabled={busy} type="submit">
+            {busy ? 'Creating account...' : 'Create account'}
+          </Button>
+        </form>
+        <p className="coach-access__help">
+          Already have an account? <a href="/">Sign in</a>
+        </p>
+      </Card>
+    </main>
+  );
+}
+
+function CoachEmailVerification() {
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'verified'>('loading');
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token === null) {
+      setError('This verification link is incomplete.');
+      return;
+    }
+    void signupApi
+      .verifyEmail(token)
+      .then(() => setStatus('verified'))
+      .catch((caught) => setError(errorMessage(caught)));
+  }, []);
+
+  return (
+    <main className="load-state coach-access">
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach account</div>
+        <h1>{status === 'verified' ? 'Your email is verified.' : 'Verifying your email...'}</h1>
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {status === 'verified' ? (
+          <p>
+            You can now <a href="/">sign in and set up your practice</a>.
+          </p>
+        ) : null}
       </Card>
     </main>
   );
@@ -2834,6 +3020,8 @@ export function App() {
   if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
   if (pathname === '/dashboard') return <LiveCoachLoop focus="dashboard" />;
   if (pathname === '/settings/data') return <DataPortabilityPage />;
+  if (pathname === '/signup') return <CoachSignup />;
+  if (pathname === '/verify-email') return <CoachEmailVerification />;
 
   return <CoachSetupApp />;
 }

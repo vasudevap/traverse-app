@@ -612,6 +612,29 @@
   font-size: 13px;
 }
 
+.coach-access__choice,
+.coach-access__check {
+  display: grid;
+  gap: 8px;
+  color: var(--trv-text);
+  font-size: 14px;
+}
+
+.coach-access__choice select {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--trv-line);
+  border-radius: var(--trv-radius-sm);
+  background: var(--trv-surface);
+  color: var(--trv-text);
+  font: inherit;
+}
+
+.coach-access__check {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+}
+
 @media (max-width: 900px) {
   .setup-layout {
     grid-template-columns: 1fr;
