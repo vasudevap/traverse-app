@@ -16,6 +16,7 @@ import { clientOnboardingMigration } from './migrations/007-client-onboarding.js
 import { coachingLoopMigration } from './migrations/008-coaching-loop.js';
 import { dataPortabilityMigration } from './migrations/009-data-portability.js';
 import { planDisplayNamesMigration } from './migrations/010-plan-display-names.js';
+import { coachSignupTenantKeyRlsMigration } from './migrations/011-coach-signup-tenant-key-rls.js';
 
 export const MIGRATION_NAME = '20260714_001_core_tenant_model';
 export const PGBOSS_ACCESS_MIGRATION_NAME = '20260715_002_pgboss_access';
@@ -27,6 +28,8 @@ export const CLIENT_ONBOARDING_MIGRATION_NAME = '20260717_007_client_onboarding'
 export const COACHING_LOOP_MIGRATION_NAME = '20260717_008_coaching_loop';
 export const DATA_PORTABILITY_MIGRATION_NAME = '20260717_009_data_portability';
 export const PLAN_DISPLAY_NAMES_MIGRATION_NAME = '20260718_010_plan_display_names';
+export const COACH_SIGNUP_TENANT_KEY_RLS_MIGRATION_NAME =
+  '20260720_011_coach_signup_tenant_key_rls';
 export const CORE_TENANT_TABLES = [
   'appointment_types',
   'appointments',
@@ -64,6 +67,7 @@ const provider: MigrationProvider = {
       [COACHING_LOOP_MIGRATION_NAME]: coachingLoopMigration,
       [DATA_PORTABILITY_MIGRATION_NAME]: dataPortabilityMigration,
       [PLAN_DISPLAY_NAMES_MIGRATION_NAME]: planDisplayNamesMigration,
+      [COACH_SIGNUP_TENANT_KEY_RLS_MIGRATION_NAME]: coachSignupTenantKeyRlsMigration,
     };
   },
 };
