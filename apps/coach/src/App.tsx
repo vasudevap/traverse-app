@@ -35,6 +35,7 @@ const navigation = [
   { href: '/calendar', label: 'Calendar' },
   { href: '/groups', label: 'Groups' },
   { href: '/settings/data', label: 'Data' },
+  { href: '/logout', label: 'Sign out' },
 ];
 
 type SetupAction = () => Promise<CoachSetupSnapshot>;
@@ -337,7 +338,10 @@ function CoachProfileForm({
                 type="file"
               />
             </label>
-            <p className="field-note">JPEG, PNG, or WebP. 5 MB maximum.</p>
+            <p className="field-note">
+              Your personal coach photo. JPEG, PNG, or WebP, 5 MB maximum. Practice-logo
+              configuration is planned for a later release.
+            </p>
           </div>
         </div>
         <div className="setup-form__grid">
@@ -768,6 +772,7 @@ function healthLabel(health: CoachLoopDashboard['relationships'][number]['health
   const labels = {
     active: 'Recently active',
     awaiting_first_touch: 'Awaiting first touch',
+    invited: 'Invitation sent',
     inactive_risk: 'Needs a check-in',
     newly_active: 'Newly active',
     scheduled: 'Session scheduled',
@@ -780,7 +785,9 @@ function healthTone(
   health: CoachLoopDashboard['relationships'][number]['health'],
 ): 'accent' | 'mark' | 'neutral' {
   if (health === 'newly_active' || health === 'scheduled') return 'accent';
-  if (health === 'awaiting_first_touch' || health === 'inactive_risk') return 'mark';
+  if (health === 'awaiting_first_touch' || health === 'inactive_risk' || health === 'invited') {
+    return 'mark';
+  }
   return 'neutral';
 }
 
@@ -822,6 +829,12 @@ function LiveCoachLoop({
   const [membershipClientId, setMembershipClientId] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<LoopAppointment | null>(null);
   const [rescheduleStart, setRescheduleStart] = useState(tomorrowMorning);
+  const activeRelationships = dashboard?.relationships.filter(
+    (relationship) => relationship.health !== 'invited',
+  );
+  const activeGroups = dashboard?.groups.filter((group) => group.archivedAt === null) ?? [];
+  const membershipReady =
+    membershipGroupId !== '' && membershipClientId !== '' && activeGroups.length > 0;
 
   async function load() {
     setError(null);
@@ -845,16 +858,26 @@ function LiveCoachLoop({
         ) {
           return requestedRelationshipId;
         }
-        return nextDashboard.relationships[0]?.id || '';
+        return (
+          nextDashboard.relationships.find((relationship) => relationship.health !== 'invited')
+            ?.id || ''
+        );
       });
       setGroupId((current) => current || nextDashboard.groups[0]?.id || '');
       setAppointmentTypeId(
         (current) =>
           current || nextDashboard.appointmentTypes.find((type) => type.active)?.id || '',
       );
-      setMembershipGroupId((current) => current || nextDashboard.groups[0]?.id || '');
+      setMembershipGroupId(
+        (current) =>
+          current || nextDashboard.groups.find((group) => group.archivedAt === null)?.id || '',
+      );
       setMembershipClientId(
-        (current) => current || nextDashboard.relationships[0]?.client.id || '',
+        (current) =>
+          current ||
+          nextDashboard.relationships.find((relationship) => relationship.health !== 'invited')
+            ?.client.id ||
+          '',
       );
     } catch (caught) {
       setError(errorMessage(caught));
@@ -968,11 +991,12 @@ function LiveCoachLoop({
   }
 
   if (dashboard === null) {
+    if (error !== null) return <LoadError error={error} onRetry={() => void load()} />;
     return (
-      <LoadError
-        error={error ?? 'Opening your coaching dashboard...'}
-        onRetry={() => void load()}
-      />
+      <main className="load-state" aria-busy="true">
+        <span className="trv-wordmark">Traverse</span>
+        <p>Opening your coaching workspace...</p>
+      </main>
     );
   }
 
@@ -1046,9 +1070,9 @@ function LiveCoachLoop({
               <div className="coach-loop-section__heading">
                 <div>
                   <div className="trv-eyebrow">Needs attention</div>
-                  <h2>Active relationships</h2>
+                  <h2>Client relationships</h2>
                 </div>
-                <Badge tone="neutral">{dashboard.relationships.length} active</Badge>
+                <Badge tone="neutral">{dashboard.relationships.length} total</Badge>
               </div>
               <div className="coach-relationship-grid">
                 {dashboard.relationships.map((relationship) => (
@@ -1063,19 +1087,32 @@ function LiveCoachLoop({
                       </Badge>
                     </div>
                     <div className="coach-relationship-card__facts">
-                      <span>{relationship.openTaskCount} open tasks</span>
-                      <span>
-                        {relationship.nextAppointment
-                          ? formatWhen(relationship.nextAppointment.startsAt)
-                          : 'No session booked'}
-                      </span>
+                      {relationship.health === 'invited' ? (
+                        <span>
+                          Invitation expires{' '}
+                          {relationship.inviteExpiresAt
+                            ? new Date(relationship.inviteExpiresAt).toLocaleDateString()
+                            : 'soon'}
+                        </span>
+                      ) : (
+                        <>
+                          <span>{relationship.openTaskCount} open tasks</span>
+                          <span>
+                            {relationship.nextAppointment
+                              ? formatWhen(relationship.nextAppointment.startsAt)
+                              : 'No session booked'}
+                          </span>
+                        </>
+                      )}
                     </div>
-                    <a
-                      className="trv-button trv-button--line"
-                      href={`/clients/${encodeURIComponent(relationship.id)}`}
-                    >
-                      Open client workspace
-                    </a>
+                    {relationship.health === 'invited' ? null : (
+                      <a
+                        className="trv-button trv-button--line"
+                        href={`/clients/${encodeURIComponent(relationship.id)}`}
+                      >
+                        Open client workspace
+                      </a>
+                    )}
                   </Card>
                 ))}
               </div>
@@ -1139,7 +1176,7 @@ function LiveCoachLoop({
                     required
                     value={targetType === 'client' ? relationshipId : groupId}
                   >
-                    {(targetType === 'client' ? dashboard.relationships : dashboard.groups).map(
+                    {(targetType === 'client' ? (activeRelationships ?? []) : dashboard.groups).map(
                       (target) => (
                         <option key={target.id} value={target.id}>
                           {'client' in target ? target.client.name : target.name}
@@ -1224,7 +1261,7 @@ function LiveCoachLoop({
                     required
                     value={relationshipId}
                   >
-                    {dashboard.relationships.map((relationship) => (
+                    {(activeRelationships ?? []).map((relationship) => (
                       <option key={relationship.id} value={relationship.id}>
                         {relationship.client.name}
                       </option>
@@ -1449,6 +1486,7 @@ function LiveCoachLoop({
               className="coach-loop-form"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (!membershipReady) return;
                 void run('member', () =>
                   loopApi.addGroupMember(membershipGroupId, membershipClientId),
                 );
@@ -1460,34 +1498,49 @@ function LiveCoachLoop({
                 <Field label="Group">
                   <select
                     className="trv-input"
+                    disabled={activeGroups.length === 0}
                     onChange={(event) => setMembershipGroupId(event.target.value)}
                     required
                     value={membershipGroupId}
                   >
-                    {dashboard.groups
-                      .filter((group) => group.archivedAt === null)
-                      .map((group) => (
+                    {activeGroups.length === 0 ? (
+                      <option value="">Create a group first</option>
+                    ) : (
+                      activeGroups.map((group) => (
                         <option key={group.id} value={group.id}>
                           {group.name}
                         </option>
-                      ))}
+                      ))
+                    )}
                   </select>
                 </Field>
-                <Field label="Client">
+                <Field
+                  hint={
+                    (activeRelationships ?? []).length === 0
+                      ? 'Clients become eligible after they complete onboarding.'
+                      : undefined
+                  }
+                  label="Client"
+                >
                   <select
                     className="trv-input"
+                    disabled={(activeRelationships ?? []).length === 0}
                     onChange={(event) => setMembershipClientId(event.target.value)}
                     required
                     value={membershipClientId}
                   >
-                    {dashboard.relationships.map((relationship) => (
-                      <option key={relationship.client.id} value={relationship.client.id}>
-                        {relationship.client.name}
-                      </option>
-                    ))}
+                    {(activeRelationships ?? []).length === 0 ? (
+                      <option value="">No active clients yet</option>
+                    ) : (
+                      (activeRelationships ?? []).map((relationship) => (
+                        <option key={relationship.client.id} value={relationship.client.id}>
+                          {relationship.client.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </Field>
-                <Button disabled={busy === 'member'} type="submit">
+                <Button disabled={busy === 'member' || !membershipReady} type="submit">
                   Add to group
                 </Button>
               </Card>
@@ -1843,6 +1896,37 @@ function LoadError({ error, onRetry }: { error: string; onRetry(): void }) {
         <Button onClick={onRetry} type="button">
           Try again
         </Button>
+      </Card>
+    </main>
+  );
+}
+
+function CoachSignOut() {
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void authApi
+      .logout('coach')
+      .then(() => window.location.replace('/'))
+      .catch((caught) => setError(errorMessage(caught)));
+  }, []);
+
+  return (
+    <main className="load-state" aria-busy={error === null}>
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach account</div>
+        <h1>{error ? 'We could not sign you out.' : 'Signing you out...'}</h1>
+        {error ? (
+          <>
+            <p>{error}</p>
+            <Button onClick={() => window.location.reload()} type="button">
+              Try again
+            </Button>
+          </>
+        ) : (
+          <p>Closing your Coach App session.</p>
+        )}
       </Card>
     </main>
   );
@@ -2458,7 +2542,7 @@ function InviteClientPage() {
               {new Date(sent.expiresAt).toLocaleDateString()}.
             </p>
             <div className="setup-actions">
-              <a className="trv-button trv-button--primary" href="#dashboard">
+              <a className="trv-button trv-button--primary" href="/dashboard">
                 Return to dashboard
               </a>
               <Button onClick={() => setSent(null)} type="button" variant="line">
@@ -2736,7 +2820,7 @@ function CoachSetupApp() {
     case 'branding':
       content = (
         <OptionalStep
-          body="Your client space will use Traverse's calm, accessible defaults. Add your logo and colors later when you are ready."
+          body="Your client space currently uses Traverse's calm, accessible defaults. Logo and color configuration are planned for a later release and are not available yet."
           busy={busy}
           eyebrow="Branding"
           highlights={[
@@ -2752,7 +2836,7 @@ function CoachSetupApp() {
     case 'payments':
       content = (
         <OptionalStep
-          body="You do not need Stripe to invite clients or run your practice. Keep handling payments offline and connect your payout account later."
+          body="You do not need Stripe to invite clients or run your practice. Keep handling payments offline. Stripe payout-account configuration is planned for a later release and is not available yet."
           busy={busy}
           eyebrow="Client payments"
           highlights={[
@@ -3186,6 +3270,7 @@ export function App() {
   if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
   if (pathname === '/dashboard') return <LiveCoachLoop focus="dashboard" />;
   if (pathname === '/settings/data') return <DataPortabilityPage />;
+  if (pathname === '/logout') return <CoachSignOut />;
   if (pathname === '/signup') return <CoachSignup />;
   if (pathname === '/verify-email') return <CoachEmailVerification />;
 

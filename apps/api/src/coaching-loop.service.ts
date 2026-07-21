@@ -69,6 +69,7 @@ export interface AvailabilitySnapshot {
 export type RelationshipHealth =
   | 'active'
   | 'awaiting_first_touch'
+  | 'invited'
   | 'inactive_risk'
   | 'newly_active'
   | 'scheduled'
@@ -78,6 +79,7 @@ export interface CoachRelationshipSummary {
   client: { id: string; email: string; name: string };
   health: RelationshipHealth;
   id: string;
+  inviteExpiresAt: Date | null;
   lastActivityAt: Date;
   nextAppointment: AppointmentSnapshot | null;
   openTaskCount: number;

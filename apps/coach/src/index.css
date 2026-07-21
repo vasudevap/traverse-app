@@ -1028,28 +1028,10 @@
   gap: 20px;
 }
 
-.coach-loop-form label,
-.coach-workspace-grid label {
-  display: grid;
-  gap: 7px;
-  color: var(--trv-text-secondary);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.coach-loop-form input,
-.coach-loop-form select,
-.coach-loop-form textarea,
-.coach-workspace-grid input,
-.coach-workspace-grid textarea {
+.coach-loop-form .trv-input,
+.coach-workspace-grid .trv-input {
   width: 100%;
   min-width: 0;
-  padding: 11px 12px;
-  border: 1px solid var(--trv-line);
-  border-radius: var(--trv-radius-sm);
-  background: var(--trv-surface-editorial);
-  color: var(--trv-text);
-  font: inherit;
 }
 
 .coach-loop-check {

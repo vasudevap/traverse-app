@@ -454,16 +454,19 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
         .selectFrom('coaching_relationships as relationship')
         .innerJoin('clients as client', 'client.id', 'relationship.client_id')
         .innerJoin('users as user', 'user.id', 'client.user_id')
+        .leftJoin('client_invites as invite', 'invite.relationship_id', 'relationship.id')
         .select([
           'client.id as client_id',
           'client.name as client_name',
           'relationship.created_at',
           'relationship.id',
+          'relationship.status',
           'relationship.updated_at',
+          'invite.expires_at as invite_expires_at',
           'user.email',
         ])
         .where('relationship.coach_id', '=', actor.coachId)
-        .where('relationship.status', '=', 'active')
+        .where('relationship.status', 'in', ['active', 'invited'])
         .where('relationship.archived_at', 'is', null)
         .execute();
       const allAppointments = (await appointmentRows(transaction, actor.coachId)).map((row) =>
@@ -496,14 +499,18 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
             id: relationship.client_id,
             name: relationship.client_name,
           },
-          health: relationshipHealth({
-            createdAt: asDate(relationship.created_at),
-            lastActivityAt,
-            openTasks,
-            touched: appointments.length > 0 || tasks.length > 0,
-            upcoming,
-          }),
+          health:
+            relationship.status === 'invited'
+              ? 'invited'
+              : relationshipHealth({
+                  createdAt: asDate(relationship.created_at),
+                  lastActivityAt,
+                  openTasks,
+                  touched: appointments.length > 0 || tasks.length > 0,
+                  upcoming,
+                }),
           id: relationship.id,
+          inviteExpiresAt: relationship.invite_expires_at,
           lastActivityAt,
           nextAppointment: upcoming,
           openTaskCount: openTasks,
@@ -513,6 +520,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
         active: 4,
         awaiting_first_touch: 1,
         inactive_risk: 0,
+        invited: 0,
         newly_active: 3,
         scheduled: 5,
         task_pending: 2,

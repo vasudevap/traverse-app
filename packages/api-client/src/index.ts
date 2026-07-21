@@ -171,11 +171,13 @@ export interface CoachLoopDashboard {
     health:
       | 'active'
       | 'awaiting_first_touch'
+      | 'invited'
       | 'inactive_risk'
       | 'newly_active'
       | 'scheduled'
       | 'task_pending';
     id: string;
+    inviteExpiresAt: string | null;
     lastActivityAt: string;
     nextAppointment: LoopAppointment | null;
     openTaskCount: number;
@@ -465,7 +467,7 @@ export class ApiResponseError extends Error {
 export interface AuthApiClient {
   currentSession(surface: AuthSurface): Promise<SessionResponse>;
   login(surface: AuthSurface, email: string, password: string): Promise<LoginResponse>;
-  logout(surface: AuthSurface, csrfToken: string): Promise<void>;
+  logout(surface: AuthSurface): Promise<void>;
 }
 
 export interface CoachSignupApiClient {
@@ -630,7 +632,11 @@ export function createAuthApiClient(
       return responseJson<LoginResponse>(response);
     },
 
-    async logout(surface, csrfToken) {
+    async logout(surface) {
+      const csrfResponse = await request(authUrl(surface, 'csrf'), {
+        credentials: 'include',
+      });
+      const { csrfToken } = await responseJson<{ csrfToken: string }>(csrfResponse);
       const response = await request(authUrl(surface, 'logout'), {
         credentials: 'include',
         headers: { 'x-csrf-token': csrfToken },
