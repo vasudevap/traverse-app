@@ -21,6 +21,13 @@ import {
 } from '@traverse/api-client';
 import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@traverse/ui';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  defaultEligibleRelationshipId,
+  groupEligibleRelationships,
+  isGroupMembershipReady,
+  trackerRelationships,
+} from './relationships.js';
+import { COACH_DASHBOARD_PATH, isCoachDashboardPath } from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
 const authApi = createAuthApiClient();
@@ -829,12 +836,14 @@ function LiveCoachLoop({
   const [membershipClientId, setMembershipClientId] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<LoopAppointment | null>(null);
   const [rescheduleStart, setRescheduleStart] = useState(tomorrowMorning);
-  const activeRelationships = dashboard?.relationships.filter(
-    (relationship) => relationship.health !== 'invited',
-  );
+  const relationships = trackerRelationships(dashboard?.relationships);
+  const activeRelationships = groupEligibleRelationships(relationships);
   const activeGroups = dashboard?.groups.filter((group) => group.archivedAt === null) ?? [];
-  const membershipReady =
-    membershipGroupId !== '' && membershipClientId !== '' && activeGroups.length > 0;
+  const membershipReady = isGroupMembershipReady({
+    activeGroupCount: activeGroups.length,
+    clientId: membershipClientId,
+    groupId: membershipGroupId,
+  });
 
   async function load() {
     setError(null);
@@ -858,10 +867,7 @@ function LiveCoachLoop({
         ) {
           return requestedRelationshipId;
         }
-        return (
-          nextDashboard.relationships.find((relationship) => relationship.health !== 'invited')
-            ?.id || ''
-        );
+        return defaultEligibleRelationshipId(nextDashboard.relationships);
       });
       setGroupId((current) => current || nextDashboard.groups[0]?.id || '');
       setAppointmentTypeId(
@@ -874,10 +880,7 @@ function LiveCoachLoop({
       );
       setMembershipClientId(
         (current) =>
-          current ||
-          nextDashboard.relationships.find((relationship) => relationship.health !== 'invited')
-            ?.client.id ||
-          '',
+          current || groupEligibleRelationships(nextDashboard.relationships)[0]?.client.id || '',
       );
     } catch (caught) {
       setError(errorMessage(caught));
@@ -1072,10 +1075,10 @@ function LiveCoachLoop({
                   <div className="trv-eyebrow">Needs attention</div>
                   <h2>Client relationships</h2>
                 </div>
-                <Badge tone="neutral">{dashboard.relationships.length} total</Badge>
+                <Badge tone="neutral">{relationships.length} total</Badge>
               </div>
               <div className="coach-relationship-grid">
-                {dashboard.relationships.map((relationship) => (
+                {relationships.map((relationship) => (
                   <Card className="coach-relationship-card" key={relationship.id}>
                     <div className="coach-relationship-card__top">
                       <div>
@@ -2542,7 +2545,7 @@ function InviteClientPage() {
               {new Date(sent.expiresAt).toLocaleDateString()}.
             </p>
             <div className="setup-actions">
-              <a className="trv-button trv-button--primary" href="/dashboard">
+              <a className="trv-button trv-button--primary" href={COACH_DASHBOARD_PATH}>
                 Return to dashboard
               </a>
               <Button onClick={() => setSent(null)} type="button" variant="line">
@@ -3268,7 +3271,7 @@ export function App() {
   if (pathname === '/clients') return <LiveCoachLoop focus="clients" />;
   if (pathname === '/calendar') return <LiveCoachLoop focus="calendar" />;
   if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
-  if (pathname === '/dashboard') return <LiveCoachLoop focus="dashboard" />;
+  if (isCoachDashboardPath(pathname)) return <LiveCoachLoop focus="dashboard" />;
   if (pathname === '/settings/data') return <DataPortabilityPage />;
   if (pathname === '/logout') return <CoachSignOut />;
   if (pathname === '/signup') return <CoachSignup />;
