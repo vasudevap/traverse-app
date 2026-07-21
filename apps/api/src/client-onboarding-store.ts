@@ -546,10 +546,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
       const defaultsGates = gateConfig(tenant.onboarding_defaults);
       if (
         templates.length === 0 &&
-        shouldProvisionStarterAgreement({
-          contractRequired: defaultsGates.contractRequired,
-          starterTemplateSelected: boolean(policies.starterTemplateSelected, true),
-        })
+        shouldProvisionStarterAgreement(defaultsGates.contractRequired)
       ) {
         const created = await database
           .insertInto('contract_templates')
