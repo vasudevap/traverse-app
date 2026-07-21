@@ -587,7 +587,12 @@ export function createCoachSetupApiClient(
         headers: prepared.headers,
         method: 'PUT',
       });
-      if (!upload.ok) throw new ApiResponseError(upload.status, 'Profile photo upload failed.');
+      if (!upload.ok) {
+        throw new ApiResponseError(
+          upload.status,
+          'We could not upload your profile photo. Please try again, or choose a JPEG, PNG, or WebP image under 5 MB.',
+        );
+      }
       return mutate('/profile-photo/complete', 'POST', { objectKey: prepared.objectKey });
     },
     useDefaultOnboarding: () => mutate('/onboarding-defaults/use-defaults', 'POST'),

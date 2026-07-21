@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { S3CoachProfileAssetStore } from '../src/coach-setup-assets.js';
 import type {
   CoachProfileAssetStore,
   CoachSetupActor,
@@ -268,4 +269,37 @@ test('TRA-39 validates and confirms a tenant-scoped profile photo upload', async
     service.prepareProfilePhoto(actor, { contentType: 'image/svg+xml', size: 100 }),
     /JPEG, PNG, or WebP/,
   );
+});
+
+test('TRA-93 presigns browser profile-photo uploads without an empty-body checksum', async () => {
+  const originalAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const originalRegion = process.env.AWS_REGION;
+  const originalSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  process.env.AWS_ACCESS_KEY_ID = 'test-access-key';
+  process.env.AWS_REGION = 'us-east-1';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test-secret-key';
+
+  try {
+    const assets = new S3CoachProfileAssetStore({
+      bucket: 'traverse-test-assets',
+      kmsKeyId: 'arn:aws:kms:us-east-1:123456789012:key/test-key',
+    });
+    const prepared = await assets.prepareUpload({
+      coachId: actor.coachId,
+      contentType: 'image/png',
+      size: 1024,
+      tenantId: actor.tenantId,
+    });
+    const url = new URL(prepared.uploadUrl);
+
+    assert.equal(url.searchParams.get('x-amz-checksum-crc32'), null);
+    assert.equal(url.searchParams.get('x-amz-sdk-checksum-algorithm'), null);
+  } finally {
+    if (originalAccessKeyId === undefined) delete process.env.AWS_ACCESS_KEY_ID;
+    else process.env.AWS_ACCESS_KEY_ID = originalAccessKeyId;
+    if (originalRegion === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = originalRegion;
+    if (originalSecretAccessKey === undefined) delete process.env.AWS_SECRET_ACCESS_KEY;
+    else process.env.AWS_SECRET_ACCESS_KEY = originalSecretAccessKey;
+  }
 });

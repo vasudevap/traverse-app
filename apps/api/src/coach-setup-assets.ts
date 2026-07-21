@@ -23,7 +23,10 @@ export class S3CoachProfileAssetStore implements CoachProfileAssetStore {
     private readonly config: { bucket: string; kmsKeyId: string },
     client?: S3Client,
   ) {
-    this.client = client ?? new S3Client({});
+    // The browser supplies the photo bytes after this URL is signed. SDK checksum
+    // calculation would therefore hash the empty placeholder body and add that
+    // checksum to the presigned URL, causing S3 to reject every real upload.
+    this.client = client ?? new S3Client({ requestChecksumCalculation: 'WHEN_REQUIRED' });
   }
 
   async prepareUpload(input: {
