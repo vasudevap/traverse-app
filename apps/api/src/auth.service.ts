@@ -1,15 +1,24 @@
-import { Inject, Injectable, OnApplicationShutdown, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  OnApplicationShutdown,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { AuthenticatedSession, AuthSessionStore, AuthSubject } from '@traverse/db';
 import {
   createOpaqueToken,
+  hashPassword,
   hashOpaqueToken,
   SESSION_TIMEOUTS,
   sessionExpiresAt,
   verifyPassword,
   type AuthRole,
 } from './auth-security.js';
+import { SIGNUP_EMAIL_SENDER, type SignupEmailSender } from './coach-signup.service.js';
 
 export const AUTH_SESSION_STORE = Symbol('AUTH_SESSION_STORE');
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 const INVALID_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=4$f52qSwfjfmMI0xgwSzF2dA$ByzGp4HSgAOUCjDWwSMYQDMYiihYrr6aF99dQJjZ1eg';
@@ -57,7 +66,38 @@ export class AuthService implements OnApplicationShutdown {
   constructor(
     @Inject(AUTH_SESSION_STORE)
     private readonly store: AuthSessionStore,
+    @Inject(SIGNUP_EMAIL_SENDER)
+    private readonly emailSender: SignupEmailSender,
   ) {}
+
+  async requestPasswordReset(emailInput: string, role: AuthRole): Promise<void> {
+    const email = emailInput.trim().toLowerCase();
+    const token = createOpaqueToken();
+    const subject = await this.store.createPasswordReset(email, {
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      role,
+      tokenHash: hashOpaqueToken(token),
+    });
+    if (subject !== undefined) {
+      await this.emailSender.sendPasswordResetEmail({
+        email: subject.email,
+        name: subject.name,
+        token,
+      });
+    }
+  }
+
+  async resetPassword(token: string, password: string, role: AuthRole): Promise<void> {
+    if (token.trim() === '') throw new BadRequestException('Reset token is required.');
+    const passwordHash = await hashPassword(password);
+    const updated = await this.store.consumePasswordReset(
+      hashOpaqueToken(token),
+      role,
+      passwordHash,
+      new Date(),
+    );
+    if (!updated) throw new UnauthorizedException('Reset link is invalid or expired.');
+  }
 
   async login(input: LoginInput): Promise<LoginResult> {
     const email = input.email.trim().toLowerCase();

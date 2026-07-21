@@ -30,10 +30,26 @@ export interface RotateSessionInput {
   userId: string;
 }
 
+export interface CreatePasswordResetInput {
+  expiresAt: Date;
+  role: ActorRole;
+  tokenHash: Buffer;
+}
+
 export interface AuthSessionStore {
   close?(): Promise<void>;
   findSubject(email: string, role: ActorRole): Promise<AuthSubject | undefined>;
   findSubjectByUserId(userId: string, role: ActorRole): Promise<AuthSubject | undefined>;
+  createPasswordReset(
+    email: string,
+    input: CreatePasswordResetInput,
+  ): Promise<Pick<AuthSubject, 'email' | 'name' | 'userId'> | undefined>;
+  consumePasswordReset(
+    tokenHash: Buffer,
+    role: ActorRole,
+    passwordHash: string,
+    now: Date,
+  ): Promise<boolean>;
   revokeSession(tokenHash: Buffer, role: ActorRole, revokedAt: Date): Promise<boolean>;
   rotateSession(input: RotateSessionInput): Promise<void>;
   validateSession(
@@ -123,6 +139,83 @@ export class DatabaseAuthSessionStore implements AuthSessionStore {
       .executeTakeFirst();
 
     return row === undefined ? undefined : mapSubject(row);
+  }
+
+  async createPasswordReset(
+    email: string,
+    input: CreatePasswordResetInput,
+  ): Promise<Pick<AuthSubject, 'email' | 'name' | 'userId'> | undefined> {
+    return this.database.transaction().execute(async (transaction) => {
+      const database = transaction.withSchema('app');
+      const subject = await database
+        .selectFrom('users as user')
+        .innerJoin('auth_subjects as subject', 'subject.user_id', 'user.id')
+        .select(['user.email', 'user.name', 'user.id as user_id'])
+        .where('user.email', '=', email)
+        .where('user.status', '=', 'active')
+        .where('subject.role', '=', input.role)
+        .executeTakeFirst();
+      if (subject === undefined) return undefined;
+      await database
+        .updateTable('auth_tokens')
+        .set({ used_at: new Date() })
+        .where('user_id', '=', subject.user_id)
+        .where('purpose', '=', 'password_reset')
+        .where('used_at', 'is', null)
+        .execute();
+      await database
+        .insertInto('auth_tokens')
+        .values({
+          expires_at: input.expiresAt,
+          metadata: { role: input.role },
+          purpose: 'password_reset',
+          token_hash: input.tokenHash,
+          user_id: subject.user_id,
+        })
+        .executeTakeFirstOrThrow();
+      return { email: subject.email, name: subject.name, userId: subject.user_id };
+    });
+  }
+
+  async consumePasswordReset(
+    tokenHash: Buffer,
+    role: ActorRole,
+    passwordHash: string,
+    now: Date,
+  ): Promise<boolean> {
+    return this.database.transaction().execute(async (transaction) => {
+      const database = transaction.withSchema('app');
+      const token = await database
+        .selectFrom('auth_tokens as token')
+        .innerJoin('auth_subjects as subject', 'subject.user_id', 'token.user_id')
+        .select(['token.id', 'token.user_id'])
+        .where('token.token_hash', '=', tokenHash)
+        .where('token.purpose', '=', 'password_reset')
+        .where('token.used_at', 'is', null)
+        .where('token.expires_at', '>', now)
+        .where('subject.role', '=', role)
+        .executeTakeFirst();
+      if (token === undefined) return false;
+      const used = await database
+        .updateTable('auth_tokens')
+        .set({ used_at: now })
+        .where('id', '=', token.id)
+        .where('used_at', 'is', null)
+        .executeTakeFirst();
+      if (Number(used.numUpdatedRows) !== 1) return false;
+      await database
+        .updateTable('users')
+        .set({ password_hash: passwordHash })
+        .where('id', '=', token.user_id)
+        .execute();
+      await database
+        .updateTable('sessions')
+        .set({ revoked_at: now })
+        .where('user_id', '=', token.user_id)
+        .where('revoked_at', 'is', null)
+        .execute();
+      return true;
+    });
   }
 
   async rotateSession(input: RotateSessionInput): Promise<void> {

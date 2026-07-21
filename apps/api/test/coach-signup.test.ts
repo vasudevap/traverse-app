@@ -73,6 +73,8 @@ class FakeKeyGenerator implements TenantKeyGenerator {
 class FakeEmailSender implements SignupEmailSender {
   verificationToken: string | undefined;
 
+  async sendPasswordResetEmail(): Promise<void> {}
+
   async sendVerificationEmail(input: { token: string }): Promise<void> {
     this.verificationToken = input.token;
   }

@@ -3,7 +3,8 @@ import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import type { AuthSubject } from '@traverse/db';
 import { createApp } from '../src/create-app.js';
-import { hashPassword } from '../src/auth-security.js';
+import { AuthService } from '../src/auth.service.js';
+import { hashPassword, verifyPassword } from '../src/auth-security.js';
 import { TestAuthSessionStore } from './test-auth-store.js';
 
 const origin = 'https://staging-app.traversecoaching.com';
@@ -11,6 +12,44 @@ const origin = 'https://staging-app.traversecoaching.com';
 function cookieHeader(setCookies: string[]): string {
   return setCookies.map((cookie) => cookie.split(';')[0]).join('; ');
 }
+
+test('password reset is account-enumeration safe, single-use, and revokes active sessions', async () => {
+  const subject: AuthSubject = {
+    clientId: null,
+    coachId: '00000000-0000-7000-8000-000000000201',
+    email: 'reset@example.test',
+    name: 'Reset Coach',
+    passwordHash: await hashPassword('original password'),
+    practiceRole: 'owner',
+    role: 'coach',
+    status: 'active',
+    tenantId: '00000000-0000-7000-8000-000000000002',
+    userId: '00000000-0000-7000-8000-000000000021',
+  };
+  let resetToken: string | undefined;
+  const store = new TestAuthSessionStore([subject]);
+  const service = new AuthService(store, {
+    async sendPasswordResetEmail(input) {
+      resetToken = input.token;
+    },
+    async sendVerificationEmail() {},
+  });
+  const session = await service.login({
+    email: subject.email,
+    ip: null,
+    password: 'original password',
+    role: 'coach',
+    userAgent: null,
+  });
+  await service.requestPasswordReset('missing@example.test', 'coach');
+  assert.equal(resetToken, undefined);
+  await service.requestPasswordReset(subject.email, 'coach');
+  assert.equal(resetToken?.length, 43);
+  await service.resetPassword(resetToken ?? '', 'replacement password', 'coach');
+  assert.equal(await verifyPassword(subject.passwordHash ?? '', 'replacement password'), true);
+  await assert.rejects(() => service.authenticate(session.sessionToken, 'coach'));
+  await assert.rejects(() => service.resetPassword(resetToken ?? '', 'another password', 'coach'));
+});
 
 test('TRA-29 completes login, role isolation, CSRF, logout, and immediate revocation', async () => {
   const subject: AuthSubject = {

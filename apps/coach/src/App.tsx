@@ -1903,8 +1903,124 @@ function CoachSignIn({
           </Button>
         </form>
         <p className="coach-access__help">
+          <a href="/forgot-password">Forgot your password?</a>
+        </p>
+        <p className="coach-access__help">
           New to Traverse? <a href="/signup">Create your coach account.</a>
         </p>
+      </Card>
+    </main>
+  );
+}
+
+function CoachForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await authApi.requestPasswordReset('coach', email);
+      setSent(true);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="load-state coach-access">
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach app</div>
+        <h1>Reset your password</h1>
+        <p>Enter your email and we will send a reset link if an active Coach account matches it.</p>
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {sent ? (
+          <p role="status">If an account matches that email, a reset link is on its way.</p>
+        ) : (
+          <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
+            <Field label="Email address">
+              <TextInput
+                autoComplete="email"
+                disabled={busy}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                type="email"
+                value={email}
+              />
+            </Field>
+            <Button disabled={busy} type="submit">
+              {busy ? 'Sending...' : 'Send reset link'}
+            </Button>
+          </form>
+        )}
+        <p className="coach-access__help">
+          <a href="/">Return to sign in</a>
+        </p>
+      </Card>
+    </main>
+  );
+}
+
+function CoachResetPassword() {
+  const token = new URLSearchParams(window.location.search).get('token') ?? '';
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reset, setReset] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await authApi.resetPassword('coach', token, password);
+      setReset(true);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="load-state coach-access">
+      <span className="trv-wordmark">Traverse</span>
+      <Card>
+        <div className="trv-eyebrow">Coach app</div>
+        <h1>Choose a new password</h1>
+        {error ? (
+          <div className="setup-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {reset ? (
+          <p role="status">
+            Your password has been reset. <a href="/">Sign in</a>.
+          </p>
+        ) : (
+          <form className="coach-access__form" onSubmit={(event) => void submit(event)}>
+            <Field label="New password">
+              <TextInput
+                autoComplete="new-password"
+                disabled={busy}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </Field>
+            <Button disabled={busy || token === ''} type="submit">
+              {busy ? 'Resetting...' : 'Reset password'}
+            </Button>
+          </form>
+        )}
       </Card>
     </main>
   );
@@ -3188,6 +3304,8 @@ export function App() {
   if (pathname === '/settings/data') return <DataPortabilityPage />;
   if (pathname === '/signup') return <CoachSignup />;
   if (pathname === '/verify-email') return <CoachEmailVerification />;
+  if (pathname === '/forgot-password') return <CoachForgotPassword />;
+  if (pathname === '/reset-password') return <CoachResetPassword />;
 
   return <CoachSetupApp />;
 }

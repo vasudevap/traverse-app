@@ -466,6 +466,12 @@ export interface AuthApiClient {
   currentSession(surface: AuthSurface): Promise<SessionResponse>;
   login(surface: AuthSurface, email: string, password: string): Promise<LoginResponse>;
   logout(surface: AuthSurface, csrfToken: string): Promise<void>;
+  requestPasswordReset(surface: AuthSurface, email: string): Promise<{ status: 'accepted' }>;
+  resetPassword(
+    surface: AuthSurface,
+    token: string,
+    password: string,
+  ): Promise<{ status: 'reset' }>;
 }
 
 export interface CoachSignupApiClient {
@@ -634,6 +640,30 @@ export function createAuthApiClient(
       if (!response.ok) {
         throw new ApiResponseError(response.status);
       }
+    },
+
+    async requestPasswordReset(surface, email) {
+      const csrfResponse = await request(authUrl(surface, 'csrf'), { credentials: 'include' });
+      const { csrfToken } = await responseJson<{ csrfToken: string }>(csrfResponse);
+      const response = await request(authUrl(surface, 'password-reset/request'), {
+        body: JSON.stringify({ email }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
+        method: 'POST',
+      });
+      return responseJson<{ status: 'accepted' }>(response);
+    },
+
+    async resetPassword(surface, token, password) {
+      const csrfResponse = await request(authUrl(surface, 'csrf'), { credentials: 'include' });
+      const { csrfToken } = await responseJson<{ csrfToken: string }>(csrfResponse);
+      const response = await request(authUrl(surface, 'password-reset/confirm'), {
+        body: JSON.stringify({ password, token }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
+        method: 'POST',
+      });
+      return responseJson<{ status: 'reset' }>(response);
     },
   };
 }

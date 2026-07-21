@@ -141,6 +141,7 @@ export interface TenantKeyGenerator {
 }
 
 export interface SignupEmailSender {
+  sendPasswordResetEmail(input: { email: string; name: string; token: string }): Promise<void>;
   sendVerificationEmail(input: {
     email: string;
     name: string;
