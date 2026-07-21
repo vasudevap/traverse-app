@@ -2,6 +2,7 @@ import type {
   AuthenticatedSession,
   AuthSessionStore,
   AuthSubject,
+  CreatePasswordResetInput,
   RotateSessionInput,
 } from '@traverse/db';
 import type { AuthRole } from '../src/auth-security.js';
@@ -18,6 +19,10 @@ function hashKey(hash: Buffer): string {
 
 export class TestAuthSessionStore implements AuthSessionStore {
   readonly sessions = new Map<string, StoredSession>();
+  readonly passwordResets = new Map<
+    string,
+    CreatePasswordResetInput & { userId: string; usedAt: Date | null }
+  >();
 
   constructor(readonly subjects: AuthSubject[] = []) {}
 
@@ -27,6 +32,43 @@ export class TestAuthSessionStore implements AuthSessionStore {
 
   async findSubjectByUserId(userId: string, role: AuthRole): Promise<AuthSubject | undefined> {
     return this.subjects.find((subject) => subject.userId === userId && subject.role === role);
+  }
+
+  async createPasswordReset(email: string, input: CreatePasswordResetInput) {
+    const subject = this.subjects.find(
+      (candidate) =>
+        candidate.email === email && candidate.role === input.role && candidate.status === 'active',
+    );
+    if (subject === undefined) return undefined;
+    for (const reset of this.passwordResets.values()) {
+      if (reset.userId === subject.userId && reset.usedAt === null) reset.usedAt = new Date();
+    }
+    this.passwordResets.set(hashKey(input.tokenHash), {
+      ...input,
+      usedAt: null,
+      userId: subject.userId,
+    });
+    return { email: subject.email, name: subject.name, userId: subject.userId };
+  }
+
+  async consumePasswordReset(tokenHash: Buffer, role: AuthRole, passwordHash: string, now: Date) {
+    const reset = this.passwordResets.get(hashKey(tokenHash));
+    const subject = this.subjects.find(
+      (candidate) => candidate.userId === reset?.userId && candidate.role === role,
+    );
+    if (
+      reset === undefined ||
+      subject === undefined ||
+      reset.usedAt !== null ||
+      reset.expiresAt <= now
+    )
+      return false;
+    reset.usedAt = now;
+    subject.passwordHash = passwordHash;
+    for (const session of this.sessions.values()) {
+      if (session.userId === subject.userId && session.revokedAt === null) session.revokedAt = now;
+    }
+    return true;
   }
 
   async rotateSession(input: RotateSessionInput): Promise<void> {

@@ -148,6 +148,25 @@ export class ResendSignupEmailSender implements SignupEmailSender {
       to: input.email,
     });
   }
+
+  async sendPasswordResetEmail(input: {
+    email: string;
+    name: string;
+    token: string;
+  }): Promise<void> {
+    const resetUrl = new URL('/reset-password', this.appBaseUrl);
+    resetUrl.searchParams.set('token', input.token);
+    await this.sender.send({
+      entityId: input.email,
+      from: this.from,
+      html: `<p>Hi ${input.name},</p><p>Reset your Traverse password:</p><p><a href="${resetUrl.toString()}">Reset password</a></p><p>This link expires in one hour.</p>`,
+      notificationId: `coach-password-reset:${input.email}`,
+      recipientId: input.email,
+      subject: 'Reset your Traverse password',
+      text: `Hi ${input.name}, reset your Traverse password: ${resetUrl.toString()} This link expires in one hour.`,
+      to: input.email,
+    });
+  }
 }
 
 export class StripeFlowBBillingClient implements FlowBBillingClient {

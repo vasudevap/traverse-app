@@ -227,6 +227,7 @@ export async function createApp(
           verifyWebhook: async () => missingSignupDependency('signupBillingClient'),
         },
         emailSender: resolvedDependencies.signupEmailSender ?? {
+          sendPasswordResetEmail: async () => missingSignupDependency('signupEmailSender'),
           sendVerificationEmail: async () => missingSignupDependency('signupEmailSender'),
         },
         store: resolvedDependencies.signupStore ?? missingSignupStore,

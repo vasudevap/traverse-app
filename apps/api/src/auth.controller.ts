@@ -32,6 +32,12 @@ interface LoginBody {
   password?: unknown;
 }
 
+interface PasswordResetBody {
+  email?: unknown;
+  password?: unknown;
+  token?: unknown;
+}
+
 interface LoginRequest extends AuthenticatedRequest {
   socket?: { remoteAddress?: string };
 }
@@ -54,6 +60,13 @@ function requireCredentials(body: LoginBody): { email: string; password: string 
     throw new BadRequestException('Email and password are required.');
   }
   return { email: body.email, password: body.password };
+}
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new BadRequestException(`${label} is required.`);
+  }
+  return value;
 }
 
 @Controller(':surface/auth')
@@ -110,6 +123,39 @@ export class AuthController {
       expiresAt: result.expiresAt.toISOString(),
       user: result.subject,
     };
+  }
+
+  @Post('password-reset/request')
+  @UseGuards(OriginCsrfGuard)
+  async requestPasswordReset(
+    @Param('surface') surface: string,
+    @Body() body: PasswordResetBody,
+    @Res({ passthrough: true }) response: HeaderResponse,
+  ) {
+    if (!isAuthSurface(surface)) throw new BadRequestException('Unknown application surface.');
+    await this.authService.requestPasswordReset(
+      requireString(body.email, 'Email'),
+      SURFACE_ROLES[surface],
+    );
+    response.setHeader('Cache-Control', 'no-store');
+    return { status: 'accepted' };
+  }
+
+  @Post('password-reset/confirm')
+  @UseGuards(OriginCsrfGuard)
+  async confirmPasswordReset(
+    @Param('surface') surface: string,
+    @Body() body: PasswordResetBody,
+    @Res({ passthrough: true }) response: HeaderResponse,
+  ) {
+    if (!isAuthSurface(surface)) throw new BadRequestException('Unknown application surface.');
+    await this.authService.resetPassword(
+      requireString(body.token, 'Reset token'),
+      requireString(body.password, 'Password'),
+      SURFACE_ROLES[surface],
+    );
+    response.setHeader('Cache-Control', 'no-store');
+    return { status: 'reset' };
   }
 
   @Get('session')
