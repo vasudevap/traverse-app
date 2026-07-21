@@ -14,6 +14,11 @@ import {
   TRAVERSE_ONBOARDING_DEFAULTS,
   TRAVERSE_POLICY_DEFAULTS,
 } from '../src/coach-setup.service.js';
+import {
+  STARTER_AGREEMENT_NAME,
+  shouldProvisionStarterAgreement,
+  starterAgreement,
+} from '../src/starter-agreement.js';
 
 const actor: CoachSetupActor = {
   coachId: '22222222-2222-4222-8222-222222222222',
@@ -143,6 +148,29 @@ function setup() {
   const assets = new MemoryAssets();
   return { assets, service: new CoachSetupService(store, assets), store };
 }
+
+test('TRA-43 repairs a missing agreement template when the invite requires the starter policy', () => {
+  assert.equal(
+    shouldProvisionStarterAgreement({ contractRequired: true, starterTemplateSelected: true }),
+    true,
+  );
+  assert.equal(
+    shouldProvisionStarterAgreement({ contractRequired: false, starterTemplateSelected: true }),
+    false,
+  );
+  assert.equal(
+    shouldProvisionStarterAgreement({ contractRequired: true, starterTemplateSelected: false }),
+    false,
+  );
+  assert.equal(STARTER_AGREEMENT_NAME, 'Traverse Starter Coaching Agreement');
+  const agreement = starterAgreement({
+    cancellationNoticeHours: 48,
+    cancellationSummary: '',
+    refundPolicy: 'flexible',
+  });
+  assert.match(agreement, /48 hours notice is requested/);
+  assert.match(agreement, /Refund policy: flexible/);
+});
 
 test('TRA-39 resumes required setup before optional choices', async () => {
   const { service } = setup();
