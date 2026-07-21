@@ -149,19 +149,9 @@ function setup() {
   return { assets, service: new CoachSetupService(store, assets), store };
 }
 
-test('TRA-43 repairs a missing agreement template when the invite requires the starter policy', () => {
-  assert.equal(
-    shouldProvisionStarterAgreement({ contractRequired: true, starterTemplateSelected: true }),
-    true,
-  );
-  assert.equal(
-    shouldProvisionStarterAgreement({ contractRequired: false, starterTemplateSelected: true }),
-    false,
-  );
-  assert.equal(
-    shouldProvisionStarterAgreement({ contractRequired: true, starterTemplateSelected: false }),
-    false,
-  );
+test('TRA-43 repairs a missing agreement template whenever an invite requires a contract', () => {
+  assert.equal(shouldProvisionStarterAgreement(true), true);
+  assert.equal(shouldProvisionStarterAgreement(false), false);
   assert.equal(STARTER_AGREEMENT_NAME, 'Traverse Starter Coaching Agreement');
   const agreement = starterAgreement({
     cancellationNoticeHours: 48,

@@ -6,11 +6,8 @@ export interface StarterAgreementPolicies {
   refundPolicy: 'flexible' | 'standard' | 'strict';
 }
 
-export function shouldProvisionStarterAgreement(input: {
-  contractRequired: boolean;
-  starterTemplateSelected: boolean;
-}): boolean {
-  return input.contractRequired && input.starterTemplateSelected;
+export function shouldProvisionStarterAgreement(contractRequired: boolean): boolean {
+  return contractRequired;
 }
 
 export function starterAgreement(policies: StarterAgreementPolicies): string {
