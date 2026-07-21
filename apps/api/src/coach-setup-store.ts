@@ -19,6 +19,7 @@ import {
   TRAVERSE_ONBOARDING_DEFAULTS,
   TRAVERSE_POLICY_DEFAULTS,
 } from './coach-setup.service.js';
+import { STARTER_AGREEMENT_NAME, starterAgreement } from './starter-agreement.js';
 
 const SETUP_STATES: SetupState[] = [
   'practice_profile',
@@ -28,7 +29,6 @@ const SETUP_STATES: SetupState[] = [
   'first_client',
   'complete',
 ];
-const STARTER_AGREEMENT_NAME = 'Traverse Starter Coaching Agreement';
 
 function recordValue(value: JsonValue): Record<string, JsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
@@ -199,20 +199,6 @@ async function logEvent(
       tenant_id: actor.tenantId,
     })
     .executeTakeFirstOrThrow();
-}
-
-function starterAgreement(policies: PolicyDefaults): string {
-  return `COACHING AGREEMENT
-
-This agreement describes a coaching relationship. Coaching is educational and developmental. It is not therapy, medical care, legal advice, or financial advice.
-
-The coach and client will agree on goals, session timing, confidentiality boundaries, fees, and communication expectations before coaching begins.
-
-Cancellation policy: ${policies.cancellationSummary || `${policies.cancellationNoticeHours} hours notice is requested.`}
-
-Refund policy: ${policies.refundPolicy}.
-
-This starter template is not legal advice. The coach is responsible for confirming that the final agreement is suitable for their services and jurisdiction.`;
 }
 
 export class DatabaseCoachSetupStore implements CoachSetupStore {

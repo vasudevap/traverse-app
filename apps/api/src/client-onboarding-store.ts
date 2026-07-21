@@ -24,6 +24,11 @@ import type {
   OnboardingSnapshot,
 } from './client-onboarding.service.js';
 import { asJsonGates } from './client-onboarding.service.js';
+import {
+  STARTER_AGREEMENT_NAME,
+  shouldProvisionStarterAgreement,
+  starterAgreement,
+} from './starter-agreement.js';
 
 interface JobBossSender {
   send(name: string, data?: object | null, options?: object): Promise<string | null>;
@@ -506,7 +511,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
       const database = transaction.withSchema('app');
       const tenant = await database
         .selectFrom('tenants')
-        .select('onboarding_defaults')
+        .select(['onboarding_defaults', 'policy_defaults'])
         .where('id', '=', actor.tenantId)
         .executeTakeFirstOrThrow();
       let forms = await database
@@ -529,7 +534,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
           .executeTakeFirstOrThrow();
         forms = [created];
       }
-      const templates = await database
+      let templates = await database
         .selectFrom('contract_templates')
         .select(['id', 'name', 'version'])
         .where('coach_id', '=', actor.coachId)
@@ -537,9 +542,40 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
         .orderBy('name')
         .execute();
       const defaults = record(tenant.onboarding_defaults);
+      const policies = record(tenant.policy_defaults);
+      const defaultsGates = gateConfig(tenant.onboarding_defaults);
+      if (
+        templates.length === 0 &&
+        shouldProvisionStarterAgreement({
+          contractRequired: defaultsGates.contractRequired,
+          starterTemplateSelected: boolean(policies.starterTemplateSelected, true),
+        })
+      ) {
+        const created = await database
+          .insertInto('contract_templates')
+          .values({
+            body: starterAgreement({
+              cancellationNoticeHours: number(policies.cancellationNoticeHours, 24),
+              cancellationSummary:
+                typeof policies.cancellationSummary === 'string'
+                  ? policies.cancellationSummary
+                  : '',
+              refundPolicy:
+                policies.refundPolicy === 'flexible' || policies.refundPolicy === 'strict'
+                  ? policies.refundPolicy
+                  : 'standard',
+            }),
+            coach_id: actor.coachId,
+            name: STARTER_AGREEMENT_NAME,
+            tenant_id: actor.tenantId,
+          })
+          .returning(['id', 'name', 'version'])
+          .executeTakeFirstOrThrow();
+        templates = [created];
+      }
       return {
         defaults: {
-          ...gateConfig(tenant.onboarding_defaults),
+          ...defaultsGates,
           inviteExpiryDays: number(defaults.inviteExpiryDays, 14),
           reminderCadenceDays: numberList(defaults.reminderCadenceDays, [3, 7]),
         },
