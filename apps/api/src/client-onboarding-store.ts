@@ -81,6 +81,7 @@ interface StoreConfig {
 
 interface ResolvedInvite {
   client_id: string;
+  coach_id: string;
   invite_id: string;
   relationship_id: string;
   tenant_id: string;
@@ -258,13 +259,14 @@ async function setResolvedInviteContext(
     .withSchema('app')
     .selectFrom('coaching_relationships as relationship')
     .innerJoin('clients as client', 'client.id', 'relationship.client_id')
-    .select(['client.id as client_id', 'client.user_id'])
+    .select(['client.id as client_id', 'client.user_id', 'relationship.coach_id'])
     .where('relationship.id', '=', invite.relationship_id)
     .executeTakeFirst();
   if (subject === undefined) return undefined;
   await sql`
     SELECT
       set_config('app.actor_id', ${subject.user_id}, true),
+      set_config('app.coach_id', ${subject.coach_id}, true),
       set_config('app.client_id', ${subject.client_id}, true)
   `.execute(transaction);
   return { ...invite, ...subject };
