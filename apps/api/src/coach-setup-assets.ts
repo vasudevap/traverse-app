@@ -45,7 +45,6 @@ export class S3CoachProfileAssetStore implements CoachProfileAssetStore {
     const command = new PutObjectCommand({
       Body: undefined,
       Bucket: this.config.bucket,
-      ContentLength: input.size,
       ContentType: input.contentType,
       Key: objectKey,
       ServerSideEncryption: 'aws:kms',
