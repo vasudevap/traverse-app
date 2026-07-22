@@ -295,7 +295,9 @@ test('TRA-93 presigns browser profile-photo uploads without an empty-body checks
     assert.equal(url.searchParams.get('x-amz-checksum-crc32'), null);
     assert.equal(url.searchParams.get('x-amz-sdk-checksum-algorithm'), null);
     assert.equal(
-      decodeURIComponent(url.searchParams.get('X-Amz-SignedHeaders') ?? '').includes('content-length'),
+      decodeURIComponent(url.searchParams.get('X-Amz-SignedHeaders') ?? '').includes(
+        'content-length',
+      ),
       false,
     );
   } finally {
