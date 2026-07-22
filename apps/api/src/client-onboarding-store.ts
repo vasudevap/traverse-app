@@ -914,6 +914,9 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
         .set({ accepted_at: sql`now()`, updated_at: sql`now()` })
         .where('id', '=', resolved.invite_id)
         .executeTakeFirstOrThrow();
+      await sql`
+        SELECT set_config('app.role', 'client', true)
+      `.execute(transaction);
       await advanceOnboarding(transaction, resolved.relationship_id, this.boss, this.config);
       await database
         .insertInto('event_log')
