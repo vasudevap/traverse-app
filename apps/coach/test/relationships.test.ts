@@ -22,17 +22,22 @@ function relationship(overrides: Partial<CoachRelationship>): CoachRelationship 
   };
 }
 
-test('TRA-92 retains a sent invitation in the relationship tracker but not group membership', () => {
+test('TRA-92 and TRA-97 retain pending relationships in the tracker but not group membership', () => {
   const invited = relationship({
     health: 'invited',
     id: 'relationship-invited',
     inviteExpiresAt: '2026-08-04T12:00:00.000Z',
   });
+  const onboarding = relationship({ health: 'onboarding', id: 'relationship-onboarding' });
   const active = relationship({ id: 'relationship-active' });
 
-  assert.deepEqual(trackerRelationships([invited, active]), [invited, active]);
-  assert.deepEqual(groupEligibleRelationships([invited, active]), [active]);
-  assert.equal(defaultEligibleRelationshipId([invited, active]), active.id);
+  assert.deepEqual(trackerRelationships([invited, onboarding, active]), [
+    invited,
+    onboarding,
+    active,
+  ]);
+  assert.deepEqual(groupEligibleRelationships([invited, onboarding, active]), [active]);
+  assert.equal(defaultEligibleRelationshipId([invited, onboarding, active]), active.id);
 });
 
 test('TRA-91 keeps Add to group disabled until a group and active client are selected', () => {
