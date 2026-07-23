@@ -12,7 +12,9 @@ export function trackerRelationships(relationships: CoachRelationship[] | undefi
 
 /** Group membership begins only after the client has completed onboarding. */
 export function groupEligibleRelationships(relationships: CoachRelationship[]) {
-  return relationships.filter((relationship) => relationship.health !== 'invited');
+  return relationships.filter(
+    (relationship) => relationship.health !== 'invited' && relationship.health !== 'onboarding',
+  );
 }
 
 export function defaultEligibleRelationshipId(relationships: CoachRelationship[]) {

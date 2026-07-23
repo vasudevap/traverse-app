@@ -217,12 +217,19 @@
   gap: 18px;
 }
 
+.setup-form__grid .trv-input {
+  width: 100%;
+}
+
 .setup-textarea {
   min-height: 92px;
   resize: vertical;
 }
 
 .setup-select {
+  display: block;
+  height: 42px;
+  line-height: 1.5;
   width: 100%;
   appearance: auto;
 }

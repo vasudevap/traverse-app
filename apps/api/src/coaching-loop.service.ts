@@ -70,6 +70,7 @@ export type RelationshipHealth =
   | 'active'
   | 'awaiting_first_touch'
   | 'invited'
+  | 'onboarding'
   | 'inactive_risk'
   | 'newly_active'
   | 'scheduled'

@@ -36,14 +36,26 @@ const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
 const loopApi = createCoachLoopApiClient();
 const dataApi = createCoachDataPortabilityApiClient();
-const navigation = [
-  { current: true, href: '/', label: 'Dashboard' },
+const navigationItems = [
+  { href: COACH_DASHBOARD_PATH, label: 'Dashboard' },
   { href: '/clients', label: 'Clients' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/groups', label: 'Groups' },
   { href: '/settings/data', label: 'Data' },
   { href: '/logout', label: 'Sign out' },
 ];
+
+function coachNavigation(pathname = window.location.pathname) {
+  return navigationItems.map((item) => ({
+    ...item,
+    current:
+      item.href === COACH_DASHBOARD_PATH
+        ? isCoachDashboardPath(pathname)
+        : item.href !== '/logout' && pathname === item.href,
+  }));
+}
+
+const navigation = coachNavigation();
 
 type SetupAction = () => Promise<CoachSetupSnapshot>;
 
@@ -780,6 +792,7 @@ function healthLabel(health: CoachLoopDashboard['relationships'][number]['health
     active: 'Recently active',
     awaiting_first_touch: 'Awaiting first touch',
     invited: 'Invitation sent',
+    onboarding: 'Onboarding in progress',
     inactive_risk: 'Needs a check-in',
     newly_active: 'Newly active',
     scheduled: 'Session scheduled',
@@ -792,7 +805,12 @@ function healthTone(
   health: CoachLoopDashboard['relationships'][number]['health'],
 ): 'accent' | 'mark' | 'neutral' {
   if (health === 'newly_active' || health === 'scheduled') return 'accent';
-  if (health === 'awaiting_first_touch' || health === 'inactive_risk' || health === 'invited') {
+  if (
+    health === 'awaiting_first_touch' ||
+    health === 'inactive_risk' ||
+    health === 'invited' ||
+    health === 'onboarding'
+  ) {
     return 'mark';
   }
   return 'neutral';
@@ -1108,7 +1126,8 @@ function LiveCoachLoop({
                         </>
                       )}
                     </div>
-                    {relationship.health === 'invited' ? null : (
+                    {relationship.health === 'invited' ||
+                    relationship.health === 'onboarding' ? null : (
                       <a
                         className="trv-button trv-button--line"
                         href={`/clients/${encodeURIComponent(relationship.id)}`}
@@ -2891,7 +2910,10 @@ function CoachSetupApp() {
       activeStep={activeStep}
       busy={busy}
       error={error}
-      onNavigate={setActiveStep}
+      onNavigate={(step) => {
+        setError(null);
+        setActiveStep(step);
+      }}
       snapshot={snapshot}
     >
       {content}

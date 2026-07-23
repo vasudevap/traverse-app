@@ -466,7 +466,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
           'user.email',
         ])
         .where('relationship.coach_id', '=', actor.coachId)
-        .where('relationship.status', 'in', ['active', 'invited'])
+        .where('relationship.status', 'in', ['active', 'invited', 'onboarding'])
         .where('relationship.archived_at', 'is', null)
         .execute();
       const allAppointments = (await appointmentRows(transaction, actor.coachId)).map((row) =>
@@ -502,13 +502,15 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
           health:
             relationship.status === 'invited'
               ? 'invited'
-              : relationshipHealth({
-                  createdAt: asDate(relationship.created_at),
-                  lastActivityAt,
-                  openTasks,
-                  touched: appointments.length > 0 || tasks.length > 0,
-                  upcoming,
-                }),
+              : relationship.status === 'onboarding'
+                ? 'onboarding'
+                : relationshipHealth({
+                    createdAt: asDate(relationship.created_at),
+                    lastActivityAt,
+                    openTasks,
+                    touched: appointments.length > 0 || tasks.length > 0,
+                    upcoming,
+                  }),
           id: relationship.id,
           inviteExpiresAt: relationship.invite_expires_at,
           lastActivityAt,
@@ -521,6 +523,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
         awaiting_first_touch: 1,
         inactive_risk: 0,
         invited: 0,
+        onboarding: 1,
         newly_active: 3,
         scheduled: 5,
         task_pending: 2,
