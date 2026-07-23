@@ -159,7 +159,7 @@ resource "aws_cloudfront_response_headers_policy" "app" {
 
   security_headers_config {
     content_security_policy {
-      content_security_policy = "default-src 'self'; base-uri 'self'; connect-src 'self' https://staging-api.traversecoaching.com; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+      content_security_policy = "default-src 'self'; base-uri 'self'; connect-src 'self' https://staging-api.traversecoaching.com ${var.asset_upload_origin}; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: ${var.asset_upload_origin}; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
       override                = true
     }
 

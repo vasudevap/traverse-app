@@ -34,6 +34,16 @@ variable "app_domain_names" {
   }
 }
 
+variable "asset_upload_origin" {
+  description = "Private asset-bucket origin allowed for browser uploads and signed image reads."
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://[a-z0-9][a-z0-9.-]*\\.amazonaws\\.com$", var.asset_upload_origin))
+    error_message = "Asset upload origin must be an HTTPS Amazon S3 origin."
+  }
+}
+
 variable "provision_app_certificate" {
   description = "Request and retain the shared NonProd CloudFront certificate before alias activation."
   type        = bool

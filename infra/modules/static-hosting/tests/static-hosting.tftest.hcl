@@ -22,8 +22,9 @@ mock_provider "aws" {
 }
 
 variables {
-  project     = "traverse"
-  environment = "nonprod"
+  project             = "traverse"
+  environment         = "nonprod"
+  asset_upload_origin = "https://traverse-assets-nonprod-124074140404.s3.us-east-1.amazonaws.com"
 }
 
 run "disabled_by_default" {
@@ -98,6 +99,14 @@ run "creates_isolated_nonprod_sites" {
       distribution.ordered_cache_behavior[0].cache_policy_id == data.aws_cloudfront_cache_policy.caching_optimized.id
     ])
     error_message = "App routes must bypass caching while fingerprinted assets use optimized caching."
+  }
+
+  assert {
+    condition = length(split(
+      var.asset_upload_origin,
+      aws_cloudfront_response_headers_policy.app[0].security_headers_config[0].content_security_policy[0].content_security_policy,
+    )) == 3
+    error_message = "The security policy must allow the private asset origin for both uploads and signed image reads."
   }
 }
 
