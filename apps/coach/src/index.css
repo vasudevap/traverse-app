@@ -217,6 +217,10 @@
   gap: 18px;
 }
 
+.setup-form__grid > .trv-field {
+  align-content: start;
+}
+
 .setup-form__grid .trv-input {
   width: 100%;
 }

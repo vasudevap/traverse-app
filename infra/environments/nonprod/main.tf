@@ -106,6 +106,7 @@ module "static_hosting" {
   environment               = "nonprod"
   enabled                   = var.enable_static_hosting
   app_domain_names          = var.static_app_domain_names
+  asset_upload_origin       = "https://${module.storage.summary.asset_bucket.name}.s3.us-east-1.amazonaws.com"
   provision_app_certificate = var.provision_static_app_certificate
   enable_app_aliases        = var.enable_static_app_aliases
 }

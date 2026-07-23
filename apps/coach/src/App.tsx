@@ -492,9 +492,18 @@ function DefaultsForm({
   snapshot: CoachSetupSnapshot;
 }) {
   const [defaults, setDefaults] = useState(snapshot.onboardingDefaults);
+  const [reminderCadenceText, setReminderCadenceText] = useState(
+    snapshot.onboardingDefaults.reminderCadenceDays.join(', '),
+  );
   function submit(event: FormEvent) {
     event.preventDefault();
-    onSave(defaults);
+    onSave({
+      ...defaults,
+      reminderCadenceDays: reminderCadenceText
+        .split(',')
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    });
   }
   return (
     <section className="setup-panel" aria-labelledby="defaults-heading">
@@ -559,16 +568,8 @@ function DefaultsForm({
           </Field>
           <Field hint="Comma-separated days after sending" label="Reminder cadence">
             <TextInput
-              onChange={(event) =>
-                setDefaults({
-                  ...defaults,
-                  reminderCadenceDays: event.target.value
-                    .split(',')
-                    .map((value) => Number(value.trim()))
-                    .filter((value) => Number.isInteger(value) && value > 0),
-                })
-              }
-              value={defaults.reminderCadenceDays.join(', ')}
+              onChange={(event) => setReminderCadenceText(event.target.value)}
+              value={reminderCadenceText}
             />
           </Field>
         </div>
@@ -825,6 +826,9 @@ function LiveCoachLoop({
   onReview?: () => void;
   setupSnapshot?: CoachSetupSnapshot;
 }) {
+  const navigation = coachNavigation(
+    focus === 'dashboard' ? COACH_DASHBOARD_PATH : window.location.pathname,
+  );
   const [dashboard, setDashboard] = useState<CoachLoopDashboard | null>(null);
   const [availability, setAvailability] = useState<
     Awaited<ReturnType<typeof loopApi.listAvailability>>
