@@ -13,6 +13,7 @@ import {
   isCoachDashboardPath,
 } from '../src/routes.js';
 import { onboardingDefaultsFormState } from '../src/onboarding-defaults.js';
+import { policyDefaultsFormState } from '../src/policy-defaults.js';
 
 function relationship(overrides: Partial<CoachRelationship>): CoachRelationship {
   return {
@@ -87,4 +88,18 @@ test('onboarding defaults form state reflects a successful Traverse-defaults res
   assert.equal(state.reminderCadenceText, '3, 7');
   assert.equal(state.defaults.inviteExpiryDays, 14);
   assert.equal(state.defaults.contractRequired, true);
+});
+
+test('policy defaults form state reflects a successful starter-defaults reset', () => {
+  const state = policyDefaultsFormState({
+    cancellationNoticeHours: 24,
+    cancellationSummary: 'Please give at least 24 hours notice when you need to reschedule.',
+    refundPolicy: 'standard',
+    starterTemplateSelected: true,
+    welcomeMessage: 'Glad you are here. I am looking forward to working together.',
+  });
+
+  assert.equal(state.cancellationNoticeHours, 24);
+  assert.equal(state.refundPolicy, 'standard');
+  assert.equal(state.starterTemplateSelected, true);
 });

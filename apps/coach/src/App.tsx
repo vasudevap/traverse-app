@@ -28,6 +28,7 @@ import {
   trackerRelationships,
 } from './relationships.js';
 import { onboardingDefaultsFormState } from './onboarding-defaults.js';
+import { policyDefaultsFormState } from './policy-defaults.js';
 import { COACH_DASHBOARD_PATH, COACH_PRACTICE_SETUP_PATH, isCoachDashboardPath } from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
@@ -614,7 +615,12 @@ function PoliciesForm({
   onSave(input: CoachSetupSnapshot['policies']): void;
   snapshot: CoachSetupSnapshot;
 }) {
-  const [policies, setPolicies] = useState(snapshot.policies);
+  const [policies, setPolicies] = useState(() => policyDefaultsFormState(snapshot.policies));
+
+  useEffect(() => {
+    setPolicies(policyDefaultsFormState(snapshot.policies));
+  }, [snapshot.policies]);
+
   function submit(event: FormEvent) {
     event.preventDefault();
     onSave(policies);
