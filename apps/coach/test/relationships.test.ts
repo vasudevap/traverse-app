@@ -7,7 +7,11 @@ import {
   isGroupMembershipReady,
   trackerRelationships,
 } from '../src/relationships.js';
-import { COACH_DASHBOARD_PATH, isCoachDashboardPath } from '../src/routes.js';
+import {
+  COACH_DASHBOARD_PATH,
+  COACH_PRACTICE_SETUP_PATH,
+  isCoachDashboardPath,
+} from '../src/routes.js';
 
 function relationship(overrides: Partial<CoachRelationship>): CoachRelationship {
   return {
@@ -63,4 +67,8 @@ test('TRA-92 invitation confirmation returns to the routed Coach dashboard', () 
   assert.equal(COACH_DASHBOARD_PATH, '/dashboard');
   assert.equal(isCoachDashboardPath(COACH_DASHBOARD_PATH), true);
   assert.equal(isCoachDashboardPath('/'), false);
+});
+
+test('dashboard users have a dedicated route back to practice setup', () => {
+  assert.equal(COACH_PRACTICE_SETUP_PATH, '/settings/practice');
 });
