@@ -27,6 +27,7 @@ import {
   isGroupMembershipReady,
   trackerRelationships,
 } from './relationships.js';
+import { onboardingDefaultsFormState } from './onboarding-defaults.js';
 import { COACH_DASHBOARD_PATH, COACH_PRACTICE_SETUP_PATH, isCoachDashboardPath } from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
@@ -498,10 +499,19 @@ function DefaultsForm({
   onSave(input: CoachSetupSnapshot['onboardingDefaults']): void;
   snapshot: CoachSetupSnapshot;
 }) {
-  const [defaults, setDefaults] = useState(snapshot.onboardingDefaults);
-  const [reminderCadenceText, setReminderCadenceText] = useState(
-    snapshot.onboardingDefaults.reminderCadenceDays.join(', '),
+  const [defaults, setDefaults] = useState(
+    () => onboardingDefaultsFormState(snapshot.onboardingDefaults).defaults,
   );
+  const [reminderCadenceText, setReminderCadenceText] = useState(
+    () => onboardingDefaultsFormState(snapshot.onboardingDefaults).reminderCadenceText,
+  );
+
+  useEffect(() => {
+    const next = onboardingDefaultsFormState(snapshot.onboardingDefaults);
+    setDefaults(next.defaults);
+    setReminderCadenceText(next.reminderCadenceText);
+  }, [snapshot.onboardingDefaults]);
+
   function submit(event: FormEvent) {
     event.preventDefault();
     onSave({
