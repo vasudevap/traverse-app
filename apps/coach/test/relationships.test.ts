@@ -12,6 +12,7 @@ import {
   COACH_PRACTICE_SETUP_PATH,
   isCoachDashboardPath,
 } from '../src/routes.js';
+import { onboardingDefaultsFormState } from '../src/onboarding-defaults.js';
 
 function relationship(overrides: Partial<CoachRelationship>): CoachRelationship {
   return {
@@ -71,4 +72,19 @@ test('TRA-92 invitation confirmation returns to the routed Coach dashboard', () 
 
 test('dashboard users have a dedicated route back to practice setup', () => {
   assert.equal(COACH_PRACTICE_SETUP_PATH, '/settings/practice');
+});
+
+test('onboarding defaults form state reflects a successful Traverse-defaults reset', () => {
+  const state = onboardingDefaultsFormState({
+    contractRequired: true,
+    countersignatureRequired: false,
+    intakeRequired: true,
+    inviteExpiryDays: 14,
+    paymentRequired: false,
+    reminderCadenceDays: [3, 7],
+  });
+
+  assert.equal(state.reminderCadenceText, '3, 7');
+  assert.equal(state.defaults.inviteExpiryDays, 14);
+  assert.equal(state.defaults.contractRequired, true);
 });
