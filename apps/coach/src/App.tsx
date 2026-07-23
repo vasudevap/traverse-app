@@ -27,7 +27,7 @@ import {
   isGroupMembershipReady,
   trackerRelationships,
 } from './relationships.js';
-import { COACH_DASHBOARD_PATH, isCoachDashboardPath } from './routes.js';
+import { COACH_DASHBOARD_PATH, COACH_PRACTICE_SETUP_PATH, isCoachDashboardPath } from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
 const authApi = createAuthApiClient();
@@ -93,6 +93,7 @@ function SetupFrame({
   children,
   error,
   onNavigate,
+  showDashboardLink = false,
   snapshot,
 }: {
   activeStep: SetupStep;
@@ -100,6 +101,7 @@ function SetupFrame({
   children: ReactNode;
   error: string | null;
   onNavigate(step: SetupStep): void;
+  showDashboardLink?: boolean;
   snapshot: CoachSetupSnapshot;
 }) {
   const completed = snapshot.checklist.filter((item) => item.status !== 'pending').length;
@@ -113,6 +115,11 @@ function SetupFrame({
           Traverse
         </a>
         <div className="setup-topbar__meta">
+          {showDashboardLink ? (
+            <a className="setup-topbar__dashboard-link" href={COACH_DASHBOARD_PATH}>
+              Back to dashboard
+            </a>
+          ) : null}
           <Badge tone="accent">{snapshot.plan.name} trial</Badge>
           <span>{daysRemaining(snapshot.plan.trialEndsAt)} days left</span>
         </div>
@@ -764,14 +771,8 @@ function ClientPreview({
   );
 }
 
-function CoachDashboard({
-  onReview,
-  snapshot,
-}: {
-  onReview(): void;
-  snapshot: CoachSetupSnapshot;
-}) {
-  return <LiveCoachLoop focus="dashboard" onReview={onReview} setupSnapshot={snapshot} />;
+function CoachDashboard() {
+  return <LiveCoachLoop focus="dashboard" />;
 }
 
 type CoachLoopFocus = 'calendar' | 'clients' | 'dashboard' | 'groups';
@@ -817,15 +818,7 @@ function healthTone(
   return 'neutral';
 }
 
-function LiveCoachLoop({
-  focus,
-  onReview,
-  setupSnapshot,
-}: {
-  focus: CoachLoopFocus;
-  onReview?: () => void;
-  setupSnapshot?: CoachSetupSnapshot;
-}) {
+function LiveCoachLoop({ focus }: { focus: CoachLoopFocus }) {
   const navigation = coachNavigation(
     focus === 'dashboard' ? COACH_DASHBOARD_PATH : window.location.pathname,
   );
@@ -1057,11 +1050,9 @@ function LiveCoachLoop({
             <a className="trv-button trv-button--primary" href="/clients/new">
               Invite a client
             </a>
-            {onReview ? (
-              <Button onClick={onReview} type="button" variant="line">
-                Practice settings
-              </Button>
-            ) : null}
+            <a className="trv-button trv-button--line" href={COACH_PRACTICE_SETUP_PATH}>
+              Practice setup
+            </a>
           </div>
         }
         eyebrow={heading.eyebrow}
@@ -1083,7 +1074,7 @@ function LiveCoachLoop({
               </div>
               <div>
                 <div className="trv-eyebrow">Practice ready</div>
-                <h2>{setupSnapshot?.practice.displayName ?? 'Your practice'} is ready.</h2>
+                <h2>Your practice is ready.</h2>
                 <p>Invite a client to begin the active coaching loop.</p>
                 <a className="trv-button trv-button--primary" href="/clients/new">
                   Invite your first client
@@ -2736,7 +2727,7 @@ function InviteClientPage() {
 }
 
 /** Authenticated owner setup flow for S3-S10. */
-function CoachSetupApp() {
+function CoachSetupApp({ review = false }: { review?: boolean }) {
   const [snapshot, setSnapshot] = useState<CoachSetupSnapshot | null>(null);
   const [activeStep, setActiveStep] = useState<SetupStep>('practice');
   const [busy, setBusy] = useState(false);
@@ -2751,7 +2742,7 @@ function CoachSetupApp() {
       await authApi.currentSession('coach');
       const loaded = await setupApi.current();
       setSnapshot(loaded);
-      setActiveStep(loaded.nextStep);
+      setActiveStep(review ? 'practice' : loaded.nextStep);
     } catch (caught) {
       if (caught instanceof ApiResponseError && caught.status === 401) {
         setSignInRequired(true);
@@ -2790,14 +2781,14 @@ function CoachSetupApp() {
       try {
         const updated = await action();
         setSnapshot(updated);
-        setActiveStep(next ?? updated.nextStep);
+        setActiveStep((current) => next ?? (review ? current : updated.nextStep));
       } catch (caught) {
         setError(errorMessage(caught));
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [review],
   );
 
   if (signInRequired) {
@@ -2818,9 +2809,7 @@ function CoachSetupApp() {
       </main>
     );
   }
-  if (activeStep === 'dashboard') {
-    return <CoachDashboard onReview={() => setActiveStep('practice')} snapshot={snapshot} />;
-  }
+  if (activeStep === 'dashboard') return <CoachDashboard />;
 
   let content: ReactNode;
   switch (activeStep) {
@@ -2918,6 +2907,7 @@ function CoachSetupApp() {
         setError(null);
         setActiveStep(step);
       }}
+      showDashboardLink={review}
       snapshot={snapshot}
     >
       {content}
@@ -3298,6 +3288,7 @@ export function App() {
   if (pathname === '/calendar') return <LiveCoachLoop focus="calendar" />;
   if (pathname === '/groups') return <LiveCoachLoop focus="groups" />;
   if (isCoachDashboardPath(pathname)) return <LiveCoachLoop focus="dashboard" />;
+  if (pathname === COACH_PRACTICE_SETUP_PATH) return <CoachSetupApp review />;
   if (pathname === '/settings/data') return <DataPortabilityPage />;
   if (pathname === '/logout') return <CoachSignOut />;
   if (pathname === '/signup') return <CoachSignup />;
