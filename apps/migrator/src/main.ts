@@ -1,5 +1,6 @@
 import { createDatabase, migrateToLatest } from '@traverse/db';
 import { databaseConnectionString, initializeJobInfrastructure } from '@traverse/jobs';
+import { resetNonprodTestData } from './reset-nonprod-test-data.js';
 
 async function main(): Promise<void> {
   const connectionString = databaseConnectionString(
@@ -12,6 +13,16 @@ async function main(): Promise<void> {
   });
 
   try {
+    if (process.argv[2] === 'reset-nonprod-test-data') {
+      const counts = await resetNonprodTestData(database);
+      console.log(`NonProd test-data reset completed: ${JSON.stringify(counts)}`);
+      return;
+    }
+
+    if (process.argv[2] !== undefined) {
+      throw new Error(`Unknown migrator command: ${process.argv[2]}`);
+    }
+
     const results = await migrateToLatest(database);
     await initializeJobInfrastructure({ connectionString, ssl: { rejectUnauthorized: true } });
     console.log(`Database migration completed: ${results.length} migration(s) evaluated.`);

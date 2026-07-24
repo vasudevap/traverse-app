@@ -1,0 +1,42 @@
+name: Reset NonProd Test Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RESET_NONPROD_TEST_DATA to permanently remove all staging test accounts and dependent records.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nonprod-test-data-reset
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: Reset NonProd test data
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AWS_ACCOUNT_ID: '124074140404'
+      AWS_REGION: us-east-1
+      ECS_CLUSTER: traverse-nonprod-cluster
+      RESET_CONFIRMATION: ${{ inputs.confirmation }}
+      ROLE_TO_ASSUME: arn:aws:iam::124074140404:role/traverse-nonprod-github-deploy
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+
+      - name: Reset staging test data
+        run: bash .github/scripts/reset-nonprod-test-data.sh
