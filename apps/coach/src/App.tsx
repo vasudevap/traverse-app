@@ -834,6 +834,28 @@ function healthTone(
   return 'neutral';
 }
 
+function onboardingDetail(relationship: CoachLoopDashboard['relationships'][number]) {
+  switch (relationship.onboardingState) {
+    case 'contract_pending':
+      return { action: null, message: 'Waiting for the client to sign the agreement.' };
+    case 'countersignature_pending':
+      return {
+        action:
+          relationship.contractId === null
+            ? null
+            : {
+                href: `/contracts/${encodeURIComponent(relationship.contractId)}/sign`,
+                label: 'Review and countersign',
+              },
+        message: 'Your countersignature is required before the client can continue.',
+      };
+    case 'intake_pending':
+      return { action: null, message: 'Waiting for the client to complete their intake.' };
+    default:
+      return { action: null, message: 'Onboarding is in progress.' };
+  }
+}
+
 function LiveCoachLoop({ focus }: { focus: CoachLoopFocus }) {
   const navigation = coachNavigation(
     focus === 'dashboard' ? COACH_DASHBOARD_PATH : window.location.pathname,
@@ -1107,47 +1129,56 @@ function LiveCoachLoop({ focus }: { focus: CoachLoopFocus }) {
                 <Badge tone="neutral">{relationships.length} total</Badge>
               </div>
               <div className="coach-relationship-grid">
-                {relationships.map((relationship) => (
-                  <Card className="coach-relationship-card" key={relationship.id}>
-                    <div className="coach-relationship-card__top">
-                      <div>
-                        <h3>{relationship.client.name}</h3>
-                        <span>{relationship.client.email}</span>
+                {relationships.map((relationship) => {
+                  const onboarding = onboardingDetail(relationship);
+                  return (
+                    <Card className="coach-relationship-card" key={relationship.id}>
+                      <div className="coach-relationship-card__top">
+                        <div>
+                          <h3>{relationship.client.name}</h3>
+                          <span>{relationship.client.email}</span>
+                        </div>
+                        <Badge tone={healthTone(relationship.health)}>
+                          {healthLabel(relationship.health)}
+                        </Badge>
                       </div>
-                      <Badge tone={healthTone(relationship.health)}>
-                        {healthLabel(relationship.health)}
-                      </Badge>
-                    </div>
-                    <div className="coach-relationship-card__facts">
-                      {relationship.health === 'invited' ? (
-                        <span>
-                          Invitation expires{' '}
-                          {relationship.inviteExpiresAt
-                            ? new Date(relationship.inviteExpiresAt).toLocaleDateString()
-                            : 'soon'}
-                        </span>
-                      ) : (
-                        <>
-                          <span>{relationship.openTaskCount} open tasks</span>
+                      <div className="coach-relationship-card__facts">
+                        {relationship.health === 'invited' ? (
                           <span>
-                            {relationship.nextAppointment
-                              ? formatWhen(relationship.nextAppointment.startsAt)
-                              : 'No session booked'}
+                            Invitation expires{' '}
+                            {relationship.inviteExpiresAt
+                              ? new Date(relationship.inviteExpiresAt).toLocaleDateString()
+                              : 'soon'}
                           </span>
-                        </>
+                        ) : relationship.health === 'onboarding' ? (
+                          <span>{onboarding.message}</span>
+                        ) : (
+                          <>
+                            <span>{relationship.openTaskCount} open tasks</span>
+                            <span>
+                              {relationship.nextAppointment
+                                ? formatWhen(relationship.nextAppointment.startsAt)
+                                : 'No session booked'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {relationship.health === 'onboarding' && onboarding.action !== null ? (
+                        <a className="trv-button trv-button--line" href={onboarding.action.href}>
+                          {onboarding.action.label}
+                        </a>
+                      ) : relationship.health === 'invited' ||
+                        relationship.health === 'onboarding' ? null : (
+                        <a
+                          className="trv-button trv-button--line"
+                          href={`/clients/${encodeURIComponent(relationship.id)}`}
+                        >
+                          Open client workspace
+                        </a>
                       )}
-                    </div>
-                    {relationship.health === 'invited' ||
-                    relationship.health === 'onboarding' ? null : (
-                      <a
-                        className="trv-button trv-button--line"
-                        href={`/clients/${encodeURIComponent(relationship.id)}`}
-                      >
-                        Open client workspace
-                      </a>
-                    )}
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </section>
           )}

@@ -78,11 +78,13 @@ export type RelationshipHealth =
 
 export interface CoachRelationshipSummary {
   client: { id: string; email: string; name: string };
+  contractId: string | null;
   health: RelationshipHealth;
   id: string;
   inviteExpiresAt: Date | null;
   lastActivityAt: Date;
   nextAppointment: AppointmentSnapshot | null;
+  onboardingState: string | null;
   openTaskCount: number;
 }
 

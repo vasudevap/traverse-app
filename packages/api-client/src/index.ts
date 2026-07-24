@@ -168,6 +168,7 @@ export interface CoachLoopDashboard {
   groups: LoopGroup[];
   relationships: Array<{
     client: { email: string; id: string; name: string };
+    contractId: string | null;
     health:
       | 'active'
       | 'awaiting_first_touch'
@@ -181,6 +182,7 @@ export interface CoachLoopDashboard {
     inviteExpiresAt: string | null;
     lastActivityAt: string;
     nextAppointment: LoopAppointment | null;
+    onboardingState: string | null;
     openTaskCount: number;
   }>;
   timezone: string;
@@ -381,6 +383,7 @@ export interface ClientOnboardingApiClient {
   current(relationshipId: string): Promise<OnboardingSnapshot>;
   decline(token: string): Promise<void>;
   inspect(token: string): Promise<InvitePreview>;
+  pending(): Promise<OnboardingSnapshot[]>;
   signContract(
     relationshipId: string,
     contractId: string,
@@ -805,6 +808,12 @@ export function createClientOnboardingApiClient(
         { credentials: 'include' },
       );
       return responseJson<InvitePreview>(response);
+    },
+    async pending() {
+      const response = await request(`${normalizedBaseUrl}/client/onboarding/pending`, {
+        credentials: 'include',
+      });
+      return responseJson<OnboardingSnapshot[]>(response);
     },
     signContract: (relationshipId, contractId, signerName) =>
       mutate(
