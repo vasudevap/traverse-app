@@ -104,6 +104,16 @@ export class CoachClientOnboardingController {
     return this.onboarding.createInvite(coachActor(request), body);
   }
 
+  @Post('relationships/:relationshipId/intake-form')
+  @UseGuards(CoachCsrfGuard)
+  repairMissingIntake(
+    @Param('relationshipId') relationshipId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.onboarding.repairMissingIntake(coachActor(request), relationshipId, body);
+  }
+
   @Post('invites/:inviteId/resend')
   @UseGuards(CoachCsrfGuard)
   resend(

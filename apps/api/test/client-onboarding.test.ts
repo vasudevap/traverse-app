@@ -139,6 +139,10 @@ class MemoryOnboardingStore implements ClientOnboardingStore {
     return true;
   }
 
+  async repairMissingIntake() {
+    return true;
+  }
+
   async getOnboarding() {
     return snapshot();
   }
@@ -224,6 +228,14 @@ test('TRA-102 gives an authenticated client their incomplete onboarding snapshot
   assert.equal(pending.length, 1);
   assert.equal(pending[0]?.state, 'intake_pending');
   assert.equal(pending[0]?.intake?.submitted, false);
+});
+
+test('TRA-102 lets the assigned coach restore a missing intake form without resetting the client', async () => {
+  const service = new ClientOnboardingService(new MemoryOnboardingStore());
+  assert.deepEqual(
+    await service.repairMissingIntake(coach, relationshipId, { intakeFormId: formId }),
+    { status: 'updated' },
+  );
 });
 
 test('TRA-40 state machine enforces gates in contract, countersignature, intake order', () => {
