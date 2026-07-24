@@ -88,6 +88,11 @@ interface ResolvedInvite {
   user_id: string;
 }
 
+export interface ClientRelationshipScope {
+  coachId: string;
+  tenantId: string;
+}
+
 type InviteScope = Pick<ResolvedInvite, 'invite_id' | 'relationship_id' | 'tenant_id'>;
 
 const STARTER_INTAKE_NAME = 'Traverse Starter Intake';
@@ -124,12 +129,16 @@ function coachContext(actor: CoachOnboardingActor) {
   };
 }
 
-function clientContext(actor: ClientOnboardingActor, tenantId: string) {
+export function clientOnboardingContext(
+  actor: ClientOnboardingActor,
+  scope: ClientRelationshipScope,
+) {
   return {
     actorId: actor.userId,
     clientId: actor.clientId,
+    coachId: scope.coachId,
     role: 'client' as const,
-    tenantId,
+    tenantId: scope.tenantId,
   };
 }
 
@@ -272,11 +281,11 @@ async function setResolvedInviteContext(
   return { ...invite, ...subject };
 }
 
-async function relationshipTenant(
+async function relationshipScope(
   database: TraverseDatabaseClient,
   actor: ClientOnboardingActor,
   relationshipId: string,
-): Promise<string | undefined> {
+): Promise<ClientRelationshipScope | undefined> {
   return database.transaction().execute(async (transaction) => {
     await sql`
       SELECT
@@ -287,10 +296,21 @@ async function relationshipTenant(
         set_config('app.client_id', ${actor.clientId}, true),
         set_config('app.practice_role', '', true)
     `.execute(transaction);
-    const result = await sql<{ tenant_id: string | null }>`
-      SELECT app.client_relationship_tenant(${relationshipId}, ${actor.clientId}) AS tenant_id
+    const result = await sql<{ coach_id: string | null; tenant_id: string | null }>`
+      SELECT coach_id, tenant_id
+      FROM app.coaching_relationships
+      WHERE id = ${relationshipId}
+        AND client_id = ${actor.clientId}
     `.execute(transaction);
-    return result.rows[0]?.tenant_id ?? undefined;
+    const relationship = result.rows[0];
+    if (
+      relationship === undefined ||
+      relationship.coach_id === null ||
+      relationship.tenant_id === null
+    ) {
+      return undefined;
+    }
+    return { coachId: relationship.coach_id, tenantId: relationship.tenant_id };
   });
 }
 
@@ -1072,9 +1092,9 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
     actor: ClientOnboardingActor,
     relationshipId: string,
   ): Promise<OnboardingSnapshot | undefined> {
-    const tenantId = await relationshipTenant(this.database, actor, relationshipId);
-    if (tenantId === undefined) return undefined;
-    return withTenantContext(this.database, clientContext(actor, tenantId), (transaction) =>
+    const scope = await relationshipScope(this.database, actor, relationshipId);
+    if (scope === undefined) return undefined;
+    return withTenantContext(this.database, clientOnboardingContext(actor, scope), (transaction) =>
       onboardingSnapshot(transaction, relationshipId),
     );
   }
@@ -1082,11 +1102,11 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
   async signContract(
     input: Parameters<ClientOnboardingStore['signContract']>[0],
   ): Promise<OnboardingSnapshot | undefined> {
-    const tenantId = await relationshipTenant(this.database, input.actor, input.relationshipId);
-    if (tenantId === undefined) return undefined;
+    const scope = await relationshipScope(this.database, input.actor, input.relationshipId);
+    if (scope === undefined) return undefined;
     return withTenantContext(
       this.database,
-      clientContext(input.actor, tenantId),
+      clientOnboardingContext(input.actor, scope),
       async (transaction) => {
         const database = transaction.withSchema('app');
         const contract = await database
@@ -1111,7 +1131,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
             signer_name: input.signerName,
             signer_role: 'client',
             signer_user_id: input.actor.userId,
-            tenant_id: tenantId,
+            tenant_id: scope.tenantId,
             user_agent: input.userAgent,
           })
           .onConflict((conflict) =>
@@ -1166,11 +1186,11 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
   async submitIntake(
     input: Parameters<ClientOnboardingStore['submitIntake']>[0],
   ): Promise<OnboardingSnapshot | undefined> {
-    const tenantId = await relationshipTenant(this.database, input.actor, input.relationshipId);
-    if (tenantId === undefined) return undefined;
+    const scope = await relationshipScope(this.database, input.actor, input.relationshipId);
+    if (scope === undefined) return undefined;
     return withTenantContext(
       this.database,
-      clientContext(input.actor, tenantId),
+      clientOnboardingContext(input.actor, scope),
       async (transaction) => {
         const database = transaction.withSchema('app');
         const relationship = await database
@@ -1194,7 +1214,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
           keyVersion: relationship.key_version,
           kmsKeyId: relationship.kms_key_id,
           responseId,
-          tenantId,
+          tenantId: scope.tenantId,
           wrappedDataKey: relationship.wrapped_data_key,
         });
         await database
@@ -1207,7 +1227,7 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
             intake_form_id: relationship.form_id,
             relationship_id: input.relationshipId,
             submitted_at: sql`now()`,
-            tenant_id: tenantId,
+            tenant_id: scope.tenantId,
           })
           .onConflict((conflict) => conflict.columns(['tenant_id', 'relationship_id']).doNothing())
           .execute();

@@ -12,7 +12,10 @@ import type {
 import { ClientOnboardingService } from '../src/client-onboarding.service.js';
 import { verifyPassword } from '../src/auth-security.js';
 import { createApp } from '../src/create-app.js';
-import { determineOnboardingState } from '../src/client-onboarding-store.js';
+import {
+  clientOnboardingContext,
+  determineOnboardingState,
+} from '../src/client-onboarding-store.js';
 import { TestAuthSessionStore } from './test-auth-store.js';
 
 const coach: CoachOnboardingActor = {
@@ -253,6 +256,22 @@ test('TRA-40 state machine enforces gates in contract, countersignature, intake 
       intakeSubmitted: true,
     }),
     'active',
+  );
+});
+
+test('TRA-40 carries the assigned coach in the client onboarding RLS context', () => {
+  assert.deepEqual(
+    clientOnboardingContext(client, {
+      coachId: coach.coachId,
+      tenantId: coach.tenantId,
+    }),
+    {
+      actorId: client.userId,
+      clientId: client.clientId,
+      coachId: coach.coachId,
+      role: 'client',
+      tenantId: coach.tenantId,
+    },
   );
 });
 
