@@ -135,6 +135,7 @@ export interface ClientOnboardingStore {
     actor: ClientOnboardingActor,
     relationshipId: string,
   ): Promise<OnboardingSnapshot | undefined>;
+  getPendingOnboarding(actor: ClientOnboardingActor): Promise<OnboardingSnapshot[]>;
   inspectInvite(tokenHash: Buffer): Promise<InvitePreview | undefined>;
   resendInvite(input: {
     actor: CoachOnboardingActor;
@@ -387,6 +388,10 @@ export class ClientOnboardingService implements OnApplicationShutdown {
     );
     if (snapshot === undefined) throw new NotFoundException();
     return snapshot;
+  }
+
+  getPendingOnboarding(actor: ClientOnboardingActor): Promise<OnboardingSnapshot[]> {
+    return this.store.getPendingOnboarding(actor);
   }
 
   async signContract(

@@ -314,6 +314,36 @@ async function relationshipScope(
   });
 }
 
+async function pendingOnboardingScopes(
+  database: TraverseDatabaseClient,
+  actor: ClientOnboardingActor,
+): Promise<Array<{ coachId: string; id: string; tenantId: string }>> {
+  return database.transaction().execute(async (transaction) => {
+    await sql`
+      SELECT
+        set_config('app.tenant_id', '', true),
+        set_config('app.actor_id', ${actor.userId}, true),
+        set_config('app.role', 'client', true),
+        set_config('app.coach_id', '', true),
+        set_config('app.client_id', ${actor.clientId}, true),
+        set_config('app.practice_role', '', true)
+    `.execute(transaction);
+    const result = await sql<{ coach_id: string; id: string; tenant_id: string }>`
+      SELECT coach_id, id, tenant_id
+      FROM app.coaching_relationships
+      WHERE client_id = ${actor.clientId}
+        AND status = 'onboarding'
+        AND archived_at IS NULL
+      ORDER BY updated_at, created_at
+    `.execute(transaction);
+    return result.rows.map((row) => ({
+      coachId: row.coach_id,
+      id: row.id,
+      tenantId: row.tenant_id,
+    }));
+  });
+}
+
 function parseFields(value: JsonValue): NonNullable<OnboardingSnapshot['intake']>['fields'] {
   const fields = record(value).fields;
   if (!Array.isArray(fields)) return [];
@@ -1097,6 +1127,20 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
     return withTenantContext(this.database, clientOnboardingContext(actor, scope), (transaction) =>
       onboardingSnapshot(transaction, relationshipId),
     );
+  }
+
+  async getPendingOnboarding(actor: ClientOnboardingActor): Promise<OnboardingSnapshot[]> {
+    const scopes = await pendingOnboardingScopes(this.database, actor);
+    const snapshots = await Promise.all(
+      scopes.map(({ coachId, id, tenantId }) =>
+        withTenantContext(
+          this.database,
+          clientOnboardingContext(actor, { coachId, tenantId }),
+          (transaction) => onboardingSnapshot(transaction, id),
+        ),
+      ),
+    );
+    return snapshots.filter((snapshot): snapshot is OnboardingSnapshot => snapshot !== undefined);
   }
 
   async signContract(

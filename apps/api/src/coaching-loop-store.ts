@@ -455,11 +455,14 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
         .innerJoin('clients as client', 'client.id', 'relationship.client_id')
         .innerJoin('users as user', 'user.id', 'client.user_id')
         .leftJoin('client_invites as invite', 'invite.relationship_id', 'relationship.id')
+        .leftJoin('contract_instances as contract', 'contract.relationship_id', 'relationship.id')
         .select([
           'client.id as client_id',
           'client.name as client_name',
+          'contract.id as contract_id',
           'relationship.created_at',
           'relationship.id',
+          'relationship.onboarding_state',
           'relationship.status',
           'relationship.updated_at',
           'invite.expires_at as invite_expires_at',
@@ -499,6 +502,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
             id: relationship.client_id,
             name: relationship.client_name,
           },
+          contractId: relationship.contract_id,
           health:
             relationship.status === 'invited'
               ? 'invited'
@@ -515,6 +519,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
           inviteExpiresAt: relationship.invite_expires_at,
           lastActivityAt,
           nextAppointment: upcoming,
+          onboardingState: relationship.onboarding_state,
           openTaskCount: openTasks,
         };
       });

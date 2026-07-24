@@ -143,6 +143,10 @@ class MemoryOnboardingStore implements ClientOnboardingStore {
     return snapshot();
   }
 
+  async getPendingOnboarding() {
+    return [snapshot('intake_pending')];
+  }
+
   async getCoachContract() {
     return {
       body: 'A coaching agreement.',
@@ -212,6 +216,14 @@ test('TRA-40 supports password and invite-link activation without replacing exis
 
   await service.acceptInvite('second-invite-token', { mode: 'magic_link' });
   assert.equal(store.acceptedPasswordHash, null);
+});
+
+test('TRA-102 gives an authenticated client their incomplete onboarding snapshot', async () => {
+  const service = new ClientOnboardingService(new MemoryOnboardingStore());
+  const pending = await service.getPendingOnboarding(client);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0]?.state, 'intake_pending');
+  assert.equal(pending[0]?.intake?.submitted, false);
 });
 
 test('TRA-40 state machine enforces gates in contract, countersignature, intake order', () => {
@@ -348,6 +360,15 @@ test('TRA-40 invitation acceptance establishes a revocable client session', asyn
     const cookies = accepted.headers.getSetCookie();
     assert.ok(cookies.some((cookie) => cookie.startsWith('trv_s_client=')));
     assert.ok(cookies.some((cookie) => cookie.startsWith('trv_csrf_client=')));
+    const sessionCookie = cookies
+      .find((cookie) => cookie.startsWith('trv_s_client='))
+      ?.split(';')[0];
+    const pending = await fetch(`${baseUrl}/client/onboarding/pending`, {
+      headers: { cookie: sessionCookie ?? '' },
+    });
+    const pendingBody = (await pending.json()) as OnboardingSnapshot[];
+    assert.equal(pending.status, 200);
+    assert.equal(pendingBody[0]?.state, 'intake_pending');
     assert.equal(authStore.sessions.size, 1);
   } finally {
     await app.close();

@@ -18,11 +18,13 @@ import { policyDefaultsFormState } from '../src/policy-defaults.js';
 function relationship(overrides: Partial<CoachRelationship>): CoachRelationship {
   return {
     client: { email: 'client@example.test', id: 'client-1', name: 'Synthetic Client' },
+    contractId: null,
     health: 'active',
     id: 'relationship-1',
     inviteExpiresAt: null,
     lastActivityAt: '2026-07-21T12:00:00.000Z',
     nextAppointment: null,
+    onboardingState: null,
     openTaskCount: 0,
     ...overrides,
   };

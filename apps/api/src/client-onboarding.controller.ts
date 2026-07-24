@@ -216,6 +216,11 @@ export class ClientOnboardingController {
     private readonly onboarding: ClientOnboardingService,
   ) {}
 
+  @Get('pending')
+  pending(@Req() request: AuthenticatedRequest) {
+    return this.onboarding.getPendingOnboarding(clientActor(request));
+  }
+
   @Get(':relationshipId')
   get(@Param('relationshipId') relationshipId: string, @Req() request: AuthenticatedRequest) {
     return this.onboarding.getOnboarding(clientActor(request), relationshipId);

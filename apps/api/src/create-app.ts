@@ -114,6 +114,7 @@ const missingClientOnboardingStore: ClientOnboardingStore = {
   getCoachContract: async () => missingSignupDependency('clientOnboardingStore'),
   getInviteOptions: async () => missingSignupDependency('clientOnboardingStore'),
   getOnboarding: async () => missingSignupDependency('clientOnboardingStore'),
+  getPendingOnboarding: async () => missingSignupDependency('clientOnboardingStore'),
   inspectInvite: async () => missingSignupDependency('clientOnboardingStore'),
   resendInvite: async () => missingSignupDependency('clientOnboardingStore'),
   revokeInvite: async () => missingSignupDependency('clientOnboardingStore'),

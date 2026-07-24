@@ -35,12 +35,19 @@ function errorMessage(error: unknown): string {
 
 function ClientDashboard() {
   const [home, setHome] = useState<ClientLoopHome | null>(null);
+  const [pendingOnboarding, setPendingOnboarding] = useState<OnboardingSnapshot[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setError(null);
     try {
+      const pending = await onboardingApi.pending();
+      setPendingOnboarding(pending);
+      if (pending.length > 0) {
+        setHome(null);
+        return;
+      }
       setHome(await loopApi.current());
     } catch (caught) {
       setError(errorMessage(caught));
@@ -50,6 +57,11 @@ function ClientDashboard() {
   useEffect(() => {
     void load();
   }, []);
+
+  const pendingSnapshot = pendingOnboarding?.[0];
+  if (pendingSnapshot !== undefined) {
+    return <AuthenticatedOnboarding initialSnapshot={pendingSnapshot} />;
+  }
 
   async function completeTask(taskId: string) {
     setBusy(taskId);
@@ -431,11 +443,13 @@ function InvitationWelcome({
 
 function OnboardingSteps({
   busy,
+  error,
   onSign,
   onSubmitIntake,
   snapshot,
 }: {
   busy: boolean;
+  error: string | null;
   onSign(name: string): void;
   onSubmitIntake(answers: Record<string, string>): void;
   snapshot: OnboardingSnapshot;
@@ -564,8 +578,8 @@ function OnboardingSteps({
   } else {
     content = (
       <Card>
-        <h1>Your next step is being prepared.</h1>
-        <p>Please return to this page shortly.</p>
+        <h1>We could not open your next onboarding step.</h1>
+        <p>Please contact your coach so they can confirm your onboarding requirements.</p>
       </Card>
     );
   }
@@ -579,8 +593,58 @@ function OnboardingSteps({
         <span>{snapshot.coach.practiceName}</span>
       </header>
       <Progress snapshot={snapshot} />
-      <div className="onboarding-step">{content}</div>
+      <div className="onboarding-step">
+        {error ? (
+          <div className="onboarding-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {content}
+      </div>
     </main>
+  );
+}
+
+function AuthenticatedOnboarding({ initialSnapshot }: { initialSnapshot: OnboardingSnapshot }) {
+  const [snapshot, setSnapshot] = useState(initialSnapshot);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function sign(name: string) {
+    if (snapshot.contract === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setSnapshot(
+        await onboardingApi.signContract(snapshot.relationshipId, snapshot.contract.id, name),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitIntake(answers: Record<string, string>) {
+    setBusy(true);
+    setError(null);
+    try {
+      setSnapshot(await onboardingApi.submitIntake(snapshot.relationshipId, answers));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <OnboardingSteps
+      busy={busy}
+      error={error}
+      onSign={(name) => void sign(name)}
+      onSubmitIntake={(answers) => void submitIntake(answers)}
+      snapshot={snapshot}
+    />
   );
 }
 
@@ -624,34 +688,6 @@ function ClientOnboarding({ token }: { token: string }) {
     }
   }
 
-  async function sign(name: string) {
-    if (snapshot?.contract === null || snapshot === null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setSnapshot(
-        await onboardingApi.signContract(snapshot.relationshipId, snapshot.contract.id, name),
-      );
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submitIntake(answers: Record<string, string>) {
-    if (snapshot === null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setSnapshot(await onboardingApi.submitIntake(snapshot.relationshipId, answers));
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (declined) {
     return (
       <main className="onboarding-page onboarding-state">
@@ -678,14 +714,7 @@ function ClientOnboarding({ token }: { token: string }) {
     );
   }
   if (snapshot !== null) {
-    return (
-      <OnboardingSteps
-        busy={busy}
-        onSign={(name) => void sign(name)}
-        onSubmitIntake={(answers) => void submitIntake(answers)}
-        snapshot={snapshot}
-      />
-    );
+    return <AuthenticatedOnboarding initialSnapshot={snapshot} />;
   }
   if (preview === null) {
     return (
