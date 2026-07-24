@@ -179,6 +179,7 @@ export interface CoachLoopDashboard {
       | 'scheduled'
       | 'task_pending';
     id: string;
+    intakeFormId: string | null;
     inviteExpiresAt: string | null;
     lastActivityAt: string;
     nextAppointment: LoopAppointment | null;
@@ -368,6 +369,7 @@ export interface CoachInviteApiClient {
     status: 'invited';
   }>;
   options(): Promise<InviteOptions>;
+  repairMissingIntake(relationshipId: string, intakeFormId: string): Promise<{ status: 'updated' }>;
 }
 
 export interface CoachContractApiClient {
@@ -738,6 +740,19 @@ export function createCoachInviteApiClient(
         method: 'POST',
       });
       return responseJson(response);
+    },
+    async repairMissingIntake(relationshipId, intakeFormId) {
+      const csrf = await csrfFor(normalizedBaseUrl, 'coach', request);
+      const response = await request(
+        `${normalizedBaseUrl}/coach/relationships/${encodeURIComponent(relationshipId)}/intake-form`,
+        {
+          body: JSON.stringify({ intakeFormId }),
+          credentials: 'include',
+          headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+          method: 'POST',
+        },
+      );
+      return responseJson<{ status: 'updated' }>(response);
     },
   };
 }

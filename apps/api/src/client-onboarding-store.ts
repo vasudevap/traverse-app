@@ -1143,6 +1143,52 @@ export class DatabaseClientOnboardingStore implements ClientOnboardingStore {
     return snapshots.filter((snapshot): snapshot is OnboardingSnapshot => snapshot !== undefined);
   }
 
+  async repairMissingIntake(
+    input: Parameters<ClientOnboardingStore['repairMissingIntake']>[0],
+  ): Promise<boolean> {
+    return withTenantContext(this.database, coachContext(input.actor), async (transaction) => {
+      const database = transaction.withSchema('app');
+      const relationship = await database
+        .selectFrom('coaching_relationships')
+        .select('gate_config')
+        .where('id', '=', input.relationshipId)
+        .where('coach_id', '=', input.actor.coachId)
+        .where('onboarding_state', '=', 'intake_pending')
+        .where('intake_form_id', 'is', null)
+        .executeTakeFirst();
+      if (relationship === undefined || !gateConfig(relationship.gate_config).intakeRequired) {
+        return false;
+      }
+      const form = await database
+        .selectFrom('intake_forms')
+        .select('id')
+        .where('id', '=', input.intakeFormId)
+        .where('coach_id', '=', input.actor.coachId)
+        .where('active', '=', true)
+        .executeTakeFirst();
+      if (form === undefined) return false;
+
+      await database
+        .updateTable('coaching_relationships')
+        .set({ intake_form_id: form.id, updated_at: sql`now()` })
+        .where('id', '=', input.relationshipId)
+        .executeTakeFirstOrThrow();
+      await database
+        .insertInto('event_log')
+        .values({
+          action: 'client.onboarding.intake_repaired',
+          actor_id: input.actor.userId,
+          actor_type: 'coach',
+          entity_id: input.relationshipId,
+          entity_type: 'coaching_relationship',
+          metadata: { intakeFormId: form.id },
+          tenant_id: input.actor.tenantId,
+        })
+        .executeTakeFirstOrThrow();
+      return true;
+    });
+  }
+
   async signContract(
     input: Parameters<ClientOnboardingStore['signContract']>[0],
   ): Promise<OnboardingSnapshot | undefined> {

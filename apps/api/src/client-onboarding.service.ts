@@ -137,6 +137,11 @@ export interface ClientOnboardingStore {
   ): Promise<OnboardingSnapshot | undefined>;
   getPendingOnboarding(actor: ClientOnboardingActor): Promise<OnboardingSnapshot[]>;
   inspectInvite(tokenHash: Buffer): Promise<InvitePreview | undefined>;
+  repairMissingIntake(input: {
+    actor: CoachOnboardingActor;
+    intakeFormId: string;
+    relationshipId: string;
+  }): Promise<boolean>;
   resendInvite(input: {
     actor: CoachOnboardingActor;
     expiresAt: Date;
@@ -304,6 +309,22 @@ export class ClientOnboardingService implements OnApplicationShutdown {
       }
       throw error;
     }
+  }
+
+  async repairMissingIntake(
+    actor: CoachOnboardingActor,
+    relationshipId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ status: 'updated' }> {
+    const repaired = await this.store.repairMissingIntake({
+      actor,
+      intakeFormId: requiredString(body.intakeFormId, 'intakeFormId', 36),
+      relationshipId: requiredString(relationshipId, 'relationshipId', 36),
+    });
+    if (!repaired) {
+      throw new NotFoundException('This client onboarding setup can no longer be repaired.');
+    }
+    return { status: 'updated' };
   }
 
   async inspectInvite(

@@ -850,7 +850,15 @@ function onboardingDetail(relationship: CoachLoopDashboard['relationships'][numb
         message: 'Your countersignature is required before the client can continue.',
       };
     case 'intake_pending':
-      return { action: null, message: 'Waiting for the client to complete their intake.' };
+      return relationship.intakeFormId === null
+        ? {
+            action: {
+              href: `/clients/${encodeURIComponent(relationship.id)}/onboarding`,
+              label: 'Repair intake setup',
+            },
+            message: 'Intake setup needs your attention before the client can continue.',
+          }
+        : { action: null, message: 'Waiting for the client to complete their intake.' };
     default:
       return { action: null, message: 'Onboarding is in progress.' };
   }
@@ -2773,6 +2781,101 @@ function InviteClientPage() {
   );
 }
 
+function RepairIntakePage({ relationshipId }: { relationshipId: string }) {
+  const [options, setOptions] = useState<InviteOptions | null>(null);
+  const [intakeFormId, setIntakeFormId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [repaired, setRepaired] = useState(false);
+
+  useEffect(() => {
+    void inviteApi
+      .options()
+      .then((loaded) => {
+        setOptions(loaded);
+        setIntakeFormId(loaded.forms[0]?.id ?? '');
+      })
+      .catch((caught) => setError(errorMessage(caught)));
+  }, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (intakeFormId === '') return;
+    setBusy(true);
+    setError(null);
+    try {
+      await inviteApi.repairMissingIntake(relationshipId, intakeFormId);
+      setRepaired(true);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AppShell navigation={navigation} productName="Coach App" roleLabel="Coach">
+      <PageHeader
+        eyebrow="Client onboarding"
+        summary="Restore the intake form so your client can continue without signing their agreement again."
+        title="Repair intake setup"
+      />
+      {error ? (
+        <div className="setup-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {repaired ? (
+        <Card className="dashboard-ready-card" tone="editorial">
+          <div className="dashboard-ready-card__mark" aria-hidden="true">
+            ✓
+          </div>
+          <div>
+            <div className="trv-eyebrow">Intake restored</div>
+            <h2>Your client can continue.</h2>
+            <p>Their agreement remains signed. Ask them to refresh their onboarding page.</p>
+            <a className="trv-button trv-button--primary" href={COACH_DASHBOARD_PATH}>
+              Return to dashboard
+            </a>
+          </div>
+        </Card>
+      ) : (
+        <form className="invite-form" onSubmit={(event) => void submit(event)}>
+          <Card>
+            <div className="trv-eyebrow">Choose the next step</div>
+            <h2>Which intake should this client complete?</h2>
+            <p>
+              This repairs the current onboarding path. It does not change the signed agreement.
+            </p>
+            <Field label="Intake form">
+              <select
+                className="trv-input setup-select"
+                onChange={(event) => setIntakeFormId(event.target.value)}
+                required
+                value={intakeFormId}
+              >
+                {options?.forms.map((form) => (
+                  <option key={form.id} value={form.id}>
+                    {form.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Card>
+          <div className="setup-actions">
+            <Button disabled={busy || intakeFormId === '' || options === null} type="submit">
+              {busy ? 'Restoring...' : 'Restore intake form'}
+            </Button>
+            <a className="trv-button trv-button--line" href={COACH_DASHBOARD_PATH}>
+              Cancel
+            </a>
+          </div>
+        </form>
+      )}
+    </AppShell>
+  );
+}
+
 /** Authenticated owner setup flow for S3-S10. */
 function CoachSetupApp({ review = false }: { review?: boolean }) {
   const [snapshot, setSnapshot] = useState<CoachSetupSnapshot | null>(null);
@@ -3325,6 +3428,11 @@ export function App() {
   }
 
   if (pathname === '/clients/new') return <InviteClientPage />;
+
+  const repairMatch = pathname.match(/^\/clients\/([^/]+)\/onboarding$/);
+  if (repairMatch?.[1] !== undefined) {
+    return <RepairIntakePage relationshipId={decodeURIComponent(repairMatch[1])} />;
+  }
 
   const relationshipMatch = pathname.match(/^\/clients\/([^/]+)$/);
   if (relationshipMatch?.[1] !== undefined) {

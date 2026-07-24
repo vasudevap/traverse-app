@@ -575,6 +575,17 @@ function OnboardingSteps({
         </form>
       </Card>
     );
+  } else if (intakePending) {
+    content = (
+      <Card className="onboarding-waiting">
+        <Badge tone="mark">Intake setup needs attention</Badge>
+        <h1>Your coach is updating the next step.</h1>
+        <p>
+          Your agreement is safely signed. You do not need to sign again. Please return shortly
+          after your coach restores the intake form.
+        </p>
+      </Card>
+    );
   } else {
     content = (
       <Card>
