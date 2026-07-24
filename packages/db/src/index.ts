@@ -1,6 +1,8 @@
 /** Shared database, migration, RLS, and field-encryption foundations. */
 export const DB_PACKAGE = '@traverse/db';
 
+export { sql } from 'kysely';
+
 export {
   DatabaseAuthSessionStore,
   type AuthenticatedSession,

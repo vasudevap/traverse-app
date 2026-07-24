@@ -241,6 +241,7 @@ resource "aws_ecs_task_definition" "migration" {
     command   = local.migration_definition.command
     environment = [
       { name = "NODE_ENV", value = "production" },
+      { name = "DEPLOYMENT_ENVIRONMENT", value = var.environment },
     ]
     secrets = [for secret in local.migration_definition.secrets : {
       name      = secret.name
