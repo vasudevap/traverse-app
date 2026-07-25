@@ -134,7 +134,7 @@ export class NodeFfmpegRunner implements FfmpegRunner {
       return parsed as FfprobeOutput;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown parse error';
-      throw new Error(`FFprobe returned invalid JSON: ${message}`);
+      throw new Error(`FFprobe returned invalid JSON: ${message}`, { cause: error });
     }
   }
 
