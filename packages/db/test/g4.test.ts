@@ -4,8 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool, type PoolClient } from 'pg';
+import { ClientOnboardingService } from '../../../apps/api/src/client-onboarding.service.js';
+import {
+  DatabaseClientOnboardingStore,
+  type IntakeAnswerEncryptor,
+} from '../../../apps/api/src/client-onboarding-store.js';
 import {
   assertRlsContract,
+  CLIENT_INTAKE_FORM_READ_MIGRATION_NAME,
   DatabaseAuthSessionStore,
   auditRlsContract,
   CORE_TENANT_TABLES,
@@ -50,6 +56,7 @@ if (databaseUrl === undefined || databaseUrl === '') {
   const relationshipAOwner = '00000000-0000-7000-8000-000000000301';
   const relationshipACoach = '00000000-0000-7000-8000-000000000302';
   const relationshipB = '00000000-0000-7000-8000-000000000303';
+  const archivedRelationshipA = '00000000-0000-7000-8000-000000000304';
   const contractTemplateA = '00000000-0000-7000-8000-000000000401';
   const intakeFormA = '00000000-0000-7000-8000-000000000402';
   const appointmentTypeA = '00000000-0000-7000-8000-000000000403';
@@ -57,6 +64,10 @@ if (databaseUrl === undefined || databaseUrl === '') {
   const taskA = '00000000-0000-7000-8000-000000000405';
   const appointmentTypeOtherCoachA = '00000000-0000-7000-8000-000000000406';
   const availabilityWindowOtherCoachA = '00000000-0000-7000-8000-000000000407';
+  const unassignedIntakeFormA = '00000000-0000-7000-8000-000000000408';
+  const intakeFormClientA2 = '00000000-0000-7000-8000-000000000409';
+  const intakeFormB = '00000000-0000-7000-8000-000000000410';
+  const archivedIntakeFormA = '00000000-0000-7000-8000-000000000411';
 
   const auditClient: SqlClient = {
     async query<Row extends object>(text: string, values?: unknown[]) {
@@ -166,10 +177,18 @@ if (databaseUrl === undefined || databaseUrl === '') {
 
     const initialMigration = await migrateToLatest(database);
     assert.equal(initialMigration.at(-1)?.status, 'Success');
+    assert.equal(initialMigration.at(-1)?.migrationName, CLIENT_INTAKE_FORM_READ_MIGRATION_NAME);
     const rollback = await migrateToEmpty(database);
     assert.equal(rollback.at(-1)?.status, 'Success');
+    assert.equal(
+      rollback.find(
+        (migration) => migration.migrationName === CLIENT_INTAKE_FORM_READ_MIGRATION_NAME,
+      )?.status,
+      'Success',
+    );
     const reappliedMigration = await migrateToLatest(database);
     assert.equal(reappliedMigration.at(-1)?.status, 'Success');
+    assert.equal(reappliedMigration.at(-1)?.migrationName, CLIENT_INTAKE_FORM_READ_MIGRATION_NAME);
 
     const seedClient = await pool.connect();
     try {
@@ -274,17 +293,61 @@ if (databaseUrl === undefined || databaseUrl === '') {
         INSERT INTO app.intake_forms
           (id, tenant_id, coach_id, name, version, form_schema)
         VALUES
-          ($1, $2, $3, 'Foundation intake', 1, '{"type":"object"}'::jsonb)
+          (
+            $1, $2, $3, 'Foundation intake', 1,
+            '{"fields":[{"id":"coaching_goals","label":"What would you like to work on?","required":true,"type":"long_text"}]}'::jsonb
+          ),
+          ($4, $2, $3, 'Unassigned intake', 1, '{"fields":[]}'::jsonb),
+          ($5, $2, $6, 'Client A2 intake', 1, '{"fields":[]}'::jsonb),
+          ($7, $8, $9, 'Tenant B intake', 1, '{"fields":[]}'::jsonb),
+          ($10, $2, $3, 'Archived relationship intake', 1, '{"fields":[]}'::jsonb)
       `,
-        [intakeFormA, tenantA, ownerCoachA],
+        [
+          intakeFormA,
+          tenantA,
+          ownerCoachA,
+          unassignedIntakeFormA,
+          intakeFormClientA2,
+          regularCoachA,
+          intakeFormB,
+          tenantB,
+          regularCoachB,
+          archivedIntakeFormA,
+        ],
       );
       await seedClient.query(
         `
         UPDATE app.coaching_relationships
-        SET contract_template_id = $1, intake_form_id = $2
-        WHERE id = $3
+        SET
+          contract_template_id = CASE WHEN id = $3 THEN $1 ELSE contract_template_id END,
+          intake_form_id = CASE
+            WHEN id = $3 THEN $2
+            WHEN id = $4 THEN $5
+            WHEN id = $6 THEN $7
+            ELSE intake_form_id
+          END
+        WHERE id IN ($3, $4, $6)
       `,
-        [contractTemplateA, intakeFormA, relationshipAOwner],
+        [
+          contractTemplateA,
+          intakeFormA,
+          relationshipAOwner,
+          relationshipACoach,
+          intakeFormClientA2,
+          relationshipB,
+          intakeFormB,
+        ],
+      );
+      await seedClient.query(
+        `
+        INSERT INTO app.coaching_relationships
+          (
+            id, tenant_id, coach_id, client_id, status, onboarding_state,
+            intake_form_id, archived_at
+          )
+        VALUES ($1, $2, $3, $4, 'revoked', 'revoked', $5, now())
+      `,
+        [archivedRelationshipA, tenantA, ownerCoachA, clientA, archivedIntakeFormA],
       );
       await seedClient.query(
         `
@@ -486,6 +549,143 @@ if (databaseUrl === undefined || databaseUrl === '') {
       );
       assert.equal(insertState, '42501');
     });
+  });
+
+  test('migration 013 is present after up, down, and reapplication', async () => {
+    const policy = await pool.query<{ policyname: string }>(
+      `
+        SELECT policyname
+        FROM pg_policies
+        WHERE schemaname = 'app'
+          AND tablename = 'intake_forms'
+          AND policyname = 'intake_forms_client_select'
+      `,
+    );
+    assert.deepEqual(policy.rows, [{ policyname: 'intake_forms_client_select' }]);
+  });
+
+  test('migration 013 lets a Client read only the form assigned to their live relationship', async () => {
+    const visible = await withRuntimeContext(clientContext(), async (client) => {
+      const result = await client.query<{ id: string }>(
+        'SELECT id FROM app.intake_forms ORDER BY id',
+      );
+      return result.rows;
+    });
+
+    assert.deepEqual(visible, [{ id: intakeFormA }]);
+    assert.equal(
+      visible.some((form) => form.id === unassignedIntakeFormA),
+      false,
+    );
+    assert.equal(
+      visible.some((form) => form.id === intakeFormClientA2),
+      false,
+    );
+    assert.equal(
+      visible.some((form) => form.id === intakeFormB),
+      false,
+    );
+  });
+
+  test('migration 013 keeps an inactive assigned form readable', async () => {
+    await pool.query('UPDATE app.intake_forms SET active = false WHERE id = $1', [intakeFormA]);
+    try {
+      const visible = await withRuntimeContext(clientContext(), async (client) => {
+        const result = await client.query<{ active: boolean; id: string }>(
+          'SELECT active, id FROM app.intake_forms WHERE id = $1',
+          [intakeFormA],
+        );
+        return result.rows;
+      });
+      assert.deepEqual(visible, [{ active: false, id: intakeFormA }]);
+    } finally {
+      await pool.query('UPDATE app.intake_forms SET active = true WHERE id = $1', [intakeFormA]);
+    }
+  });
+
+  test('migration 013 denies form access through an archived relationship', async () => {
+    try {
+      const visible = await withRuntimeContext(clientContext(), async (client) => {
+        const result = await client.query<{ id: string }>(
+          'SELECT id FROM app.intake_forms WHERE id = $1',
+          [archivedIntakeFormA],
+        );
+        return result.rows;
+      });
+      assert.deepEqual(visible, []);
+    } finally {
+      await pool.query('DELETE FROM app.coaching_relationships WHERE id = $1', [
+        archivedRelationshipA,
+      ]);
+      await pool.query('DELETE FROM app.intake_forms WHERE id = $1', [archivedIntakeFormA]);
+    }
+  });
+
+  test('migration 013 fails closed without tenant or Client context', async () => {
+    const missingTenant = await withRuntimeContext(
+      {
+        actorId: clientUserA,
+        clientId: clientA,
+        coachId: ownerCoachA,
+        role: 'client',
+      },
+      async (client) => {
+        const result = await client.query('SELECT id FROM app.intake_forms');
+        return result.rowCount;
+      },
+    );
+    assert.equal(missingTenant, 0);
+
+    const missingClient = await withRuntimeContext(
+      {
+        actorId: clientUserA,
+        coachId: ownerCoachA,
+        role: 'client',
+        tenantId: tenantA,
+      },
+      async (client) => {
+        const result = await client.query('SELECT id FROM app.intake_forms');
+        return result.rowCount;
+      },
+    );
+    assert.equal(missingClient, 0);
+  });
+
+  test('migration 013 preserves existing Coach and Admin intake form access', async () => {
+    const ownerVisible = await withRuntimeContext(ownerContext(), async (client) => {
+      const result = await client.query<{ id: string }>(
+        'SELECT id FROM app.intake_forms ORDER BY id',
+      );
+      return result.rows;
+    });
+    assert.deepEqual(ownerVisible, [
+      { id: intakeFormA },
+      { id: unassignedIntakeFormA },
+      { id: intakeFormClientA2 },
+    ]);
+
+    const regularCoachVisible = await withRuntimeContext(regularCoachContext(), async (client) => {
+      const result = await client.query<{ id: string }>(
+        'SELECT id FROM app.intake_forms ORDER BY id',
+      );
+      return result.rows;
+    });
+    assert.deepEqual(regularCoachVisible, [{ id: intakeFormClientA2 }]);
+
+    const adminVisible = await withRuntimeContext(
+      {
+        actorId: ownerUserA,
+        role: 'admin',
+        tenantId: tenantA,
+      },
+      async (client) => {
+        const result = await client.query<{ id: string }>(
+          'SELECT id FROM app.intake_forms ORDER BY id',
+        );
+        return result.rows;
+      },
+    );
+    assert.deepEqual(adminVisible, ownerVisible);
   });
 
   test('TRA-40 resolves only valid invite tokens and scopes multi-practice client relationships', async () => {
@@ -1288,6 +1488,83 @@ if (databaseUrl === undefined || databaseUrl === '') {
       ),
     );
     assert.equal(deleteState, '42501');
+  });
+
+  test('database-backed client onboarding completes through the production store', async () => {
+    let sentJobCount = 0;
+    const boss = {
+      async send() {
+        sentJobCount += 1;
+        return `g4-job-${sentJobCount}`;
+      },
+      async stop() {},
+    };
+    const encryptor: IntakeAnswerEncryptor = {
+      async encrypt() {
+        return Buffer.alloc(64, 7);
+      },
+    };
+    const store = new DatabaseClientOnboardingStore(runtimeDatabase, boss, encryptor, {
+      clientAppBaseUrl: 'https://client.example.test',
+      coachAppBaseUrl: 'https://coach.example.test',
+      emailFrom: 'Traverse <notifications@example.test>',
+    });
+    const service = new ClientOnboardingService(store);
+    const rawToken = 'g4-database-backed-client-onboarding-token';
+    const created = await store.createInvite({
+      actor: {
+        coachId: ownerCoachA,
+        practiceRole: 'owner',
+        tenantId: tenantA,
+        userId: ownerUserA,
+      },
+      clientName: 'Database Client',
+      contractTemplateId: contractTemplateA,
+      email: 'database-client@example.test',
+      expiresAt: new Date('2035-08-01T12:00:00.000Z'),
+      gates: {
+        contractRequired: true,
+        countersignatureRequired: false,
+        intakeRequired: true,
+        paymentRequired: false,
+      },
+      intakeFormId: intakeFormA,
+      phone: null,
+      rawToken,
+      tokenHash: createHash('sha256').update(rawToken).digest(),
+    });
+
+    const accepted = await service.acceptInvite(rawToken, { mode: 'magic_link' });
+    assert.equal(accepted.relationshipId, created.relationshipId);
+    assert.equal(accepted.snapshot.state, 'contract_pending');
+    const contractId = accepted.snapshot.contract?.id;
+    assert.ok(contractId);
+
+    const relationship = await pool.query<{ client_id: string }>(
+      'SELECT client_id FROM app.coaching_relationships WHERE id = $1',
+      [created.relationshipId],
+    );
+    const actor = {
+      clientId: relationship.rows[0]?.client_id ?? '',
+      userId: accepted.userId,
+    };
+    const signed = await service.signContract(
+      actor,
+      created.relationshipId,
+      contractId,
+      { agreed: true, signerName: 'Database Client' },
+      { ip: '127.0.0.1', userAgent: 'g4-test' },
+    );
+    assert.equal(signed.state, 'intake_pending');
+    assert.notEqual(signed.intake, null);
+    assert.equal(signed.intake?.id, intakeFormA);
+
+    const submitted = await service.submitIntake(actor, created.relationshipId, {
+      answers: { coaching_goals: 'Build a durable leadership practice.' },
+    });
+    assert.equal(submitted.state, 'active');
+    assert.equal(submitted.intake?.submitted, true);
+    assert.equal(sentJobCount, 3);
   });
 
   test('G4 audit reports missing tenant safeguards', async () => {
