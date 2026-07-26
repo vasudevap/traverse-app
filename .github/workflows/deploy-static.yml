@@ -1,10 +1,30 @@
 name: Deploy static apps
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/admin/**
+      - apps/billing-admin/**
+      - apps/client/**
+      - apps/coach/**
+      - packages/api-client/**
+      - packages/ui/**
+      - .github/scripts/deploy-static.sh
+      - .github/scripts/deployment-revision.mjs
+      - .github/scripts/verify-deployed-revision.mjs
+      - .github/scripts/write-static-version.mjs
+      - .github/workflows/deploy-static.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.base.json
+      - turbo.json
   workflow_dispatch:
     inputs:
       confirm_nonprod:
-        description: Confirm publication to the four provider-generated NonProd endpoints
+        description: Confirm publication to the four NonProd static applications
         required: true
         default: false
         type: boolean
@@ -19,7 +39,9 @@ concurrency:
 
 jobs:
   deploy-nonprod-static:
-    if: github.ref == 'refs/heads/main' && inputs.confirm_nonprod
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || inputs.confirm_nonprod)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: nonprod-static
@@ -27,6 +49,7 @@ jobs:
       AWS_REGION: us-east-1
       DEPLOYMENT_ENVIRONMENT: nonprod
       ROLE_TO_ASSUME: arn:aws:iam::124074140404:role/traverse-nonprod-github-deploy
+      TRAVERSE_BUILD_SHA: ${{ github.sha }}
 
     steps:
       - name: Check out repository
@@ -46,6 +69,9 @@ jobs:
       - name: Build app shells
         run: pnpm build
 
+      - name: Write static revision manifests
+        run: node .github/scripts/write-static-version.mjs
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -54,3 +80,12 @@ jobs:
 
       - name: Publish static apps
         run: bash .github/scripts/deploy-static.sh
+
+      - name: Verify public staging revisions
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          REVISION_FIELD: commit
+          VERIFY_URLS: >-
+            https://staging-app.traversecoaching.com/version.json,
+            https://staging-client.traversecoaching.com/version.json
+        run: node .github/scripts/verify-deployed-revision.mjs

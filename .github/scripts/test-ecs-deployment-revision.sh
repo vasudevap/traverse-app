@@ -33,6 +33,7 @@ jq -n '{
 
 jq \
   --arg image "123456789012.dkr.ecr.us-east-1.amazonaws.com/traverse-nonprod-api@sha256:test" \
+  --arg application_revision "1234567890abcdef1234567890abcdef12345678" \
   --arg deployment_environment "nonprod" \
   --arg asset_bucket_name "traverse-assets-nonprod-123456789012" \
   --arg coach_app_base_url "https://staging-app.traversecoaching.com" \
@@ -44,8 +45,9 @@ jq --exit-status '
   .family == "traverse-nonprod-api"
   and .cpu == "256"
   and .containerDefinitions[0].image == "123456789012.dkr.ecr.us-east-1.amazonaws.com/traverse-nonprod-api@sha256:test"
-  and (.containerDefinitions[0].environment | length) == 5
+  and (.containerDefinitions[0].environment | length) == 6
   and ([.containerDefinitions[0].environment[] | select(.name == "NODE_ENV" and .value == "production")] | length) == 1
+  and ([.containerDefinitions[0].environment[] | select(.name == "APPLICATION_REVISION" and .value == "1234567890abcdef1234567890abcdef12345678")] | length) == 1
   and ([.containerDefinitions[0].environment[] | select(.name == "DEPLOYMENT_ENVIRONMENT" and .value == "nonprod")] | length) == 1
   and ([.containerDefinitions[0].environment[] | select(.name == "ASSET_BUCKET_NAME" and .value == "traverse-assets-nonprod-123456789012")] | length) == 1
   and ([.containerDefinitions[0].environment[] | select(.name == "COACH_APP_BASE_URL" and .value == "https://staging-app.traversecoaching.com")] | length) == 1
@@ -70,6 +72,7 @@ jq -n '{
 
 jq \
   --arg image "123456789012.dkr.ecr.us-east-1.amazonaws.com/traverse-nonprod-api@sha256:test" \
+  --arg application_revision "1234567890abcdef1234567890abcdef12345678" \
   --arg deployment_environment "nonprod" \
   --arg asset_bucket_name "traverse-assets-nonprod-123456789012" \
   --arg coach_app_base_url "https://staging-app.traversecoaching.com" \
@@ -78,7 +81,8 @@ jq \
   "$empty_environment_input" >"$empty_environment_output"
 
 jq --exit-status '
-  (.containerDefinitions[0].environment | length) == 4
+  (.containerDefinitions[0].environment | length) == 5
+  and ([.containerDefinitions[0].environment[] | select(.name == "APPLICATION_REVISION" and .value == "1234567890abcdef1234567890abcdef12345678")] | length) == 1
   and ([.containerDefinitions[0].environment[] | select(.name == "DEPLOYMENT_ENVIRONMENT" and .value == "nonprod")] | length) == 1
 ' "$empty_environment_output" >/dev/null
 

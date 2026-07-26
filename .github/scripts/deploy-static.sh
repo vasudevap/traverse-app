@@ -8,6 +8,8 @@ if [[ "${DEPLOYMENT_ENVIRONMENT:-}" != "nonprod" ]]; then
   exit 1
 fi
 
+: "${TRAVERSE_BUILD_SHA:?TRAVERSE_BUILD_SHA is required}"
+
 actual_account_id="$(aws sts get-caller-identity --query Account --output text)"
 
 if [[ "$actual_account_id" != "$required_account_id" ]]; then
@@ -23,6 +25,17 @@ for surface in "${surfaces[@]}"; do
 
   if [[ ! -f "${dist_dir}/index.html" ]]; then
     echo "Missing ${dist_dir}/index.html. Run the workspace build first." >&2
+    exit 1
+  fi
+
+  if [[ ! -f "${dist_dir}/version.json" ]]; then
+    echo "Missing ${dist_dir}/version.json. Write the static revision manifests first." >&2
+    exit 1
+  fi
+
+  if ! jq --exit-status --arg expected "$TRAVERSE_BUILD_SHA" \
+    '.commit == $expected' "${dist_dir}/version.json" >/dev/null; then
+    echo "Static revision manifest does not match TRAVERSE_BUILD_SHA for ${surface}." >&2
     exit 1
   fi
 

@@ -60,6 +60,9 @@ jobs:
       - name: Test ECS deployment revision transformation
         run: bash .github/scripts/test-ecs-deployment-revision.sh
 
+      - name: Test deployment revision evidence
+        run: node .github/scripts/test-deployment-revision.mjs
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 

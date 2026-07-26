@@ -19,5 +19,6 @@ pg-boss on AWS ECS Fargate; four Vite/React frontends.
 | packages/config                                         | Non-secret shared constants                              |
 
 Dev: `corepack enable && pnpm install && pnpm verify`. Local V15 defaults are listed
-in `.env.example`. Conventions: no em dashes
-anywhere; one teal action per view; see traverse-docs CLAUDE.md.
+in `.env.example`. Read `AGENTS.md` before application work. Conventions: no em dashes
+anywhere and one teal action per view. Private specifications and decisions remain in
+the documentation repository.

@@ -7,6 +7,7 @@ set -Eeuo pipefail
 : "${ECR_REGISTRY:?ECR_REGISTRY is required}"
 : "${IMAGE_DIGEST:?IMAGE_DIGEST is required}"
 : "${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}"
+: "${GITHUB_SHA:?GITHUB_SHA is required}"
 
 STABILITY_OBSERVATION_SECONDS="${STABILITY_OBSERVATION_SECONDS:-130}"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -35,6 +36,7 @@ register_deployment_revision() {
 
   jq \
     --arg image "$image" \
+    --arg application_revision "$GITHUB_SHA" \
     --arg deployment_environment "$DEPLOYMENT_ENVIRONMENT" \
     --arg asset_bucket_name "$asset_bucket_name" \
     --arg coach_app_base_url "$coach_app_base_url" \

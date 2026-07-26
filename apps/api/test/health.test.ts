@@ -5,6 +5,10 @@ import { createApp } from '../src/create-app.js';
 import { TestAuthSessionStore } from './test-auth-store.js';
 
 test('GET /health returns the API liveness response', async () => {
+  const previousRevision = process.env.APPLICATION_REVISION;
+  const expectedRevision = '1234567890abcdef1234567890abcdef12345678';
+  process.env.APPLICATION_REVISION = expectedRevision;
+
   const app = await createApp(
     { logger: false },
     { allowedOrigins: new Set(), authSessionStore: new TestAuthSessionStore() },
@@ -15,16 +19,23 @@ test('GET /health returns the API liveness response', async () => {
     const address = app.getHttpServer().address() as AddressInfo;
     const response = await fetch(`http://127.0.0.1:${address.port}/health`);
     const body = (await response.json()) as {
-      status: string;
+      revision: string;
       service: string;
+      status: string;
       ts: string;
     };
 
     assert.equal(response.status, 200);
     assert.equal(body.status, 'ok');
     assert.equal(body.service, 'api');
+    assert.equal(body.revision, expectedRevision);
     assert.ok(Number.isFinite(Date.parse(body.ts)));
   } finally {
     await app.close();
+    if (previousRevision === undefined) {
+      delete process.env.APPLICATION_REVISION;
+    } else {
+      process.env.APPLICATION_REVISION = previousRevision;
+    }
   }
 });

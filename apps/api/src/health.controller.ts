@@ -5,6 +5,11 @@ import { Controller, Get } from '@nestjs/common';
 export class HealthController {
   @Get('health')
   health() {
-    return { status: 'ok', service: 'api', ts: new Date().toISOString() };
+    return {
+      revision: process.env.APPLICATION_REVISION?.trim() || 'local',
+      service: 'api',
+      status: 'ok',
+      ts: new Date().toISOString(),
+    };
   }
 }

@@ -375,13 +375,16 @@ files under `assets/` use the managed optimized cache policy and one-year immuta
 metadata. App routes and entry-point files use the managed disabled cache policy, so static
 publication does not need broad CloudFront invalidation permissions.
 
-After the guarded infrastructure is separately reviewed and applied, publication remains
-manual. Dispatch `Deploy static apps` from `main` and affirm the NonProd confirmation input.
-The workflow has no production target and assumes the NonProd role only through the exact
-`nonprod-static` environment subject. The existing ECS deployment workflow continues to use
-the exact `main` branch subject. Its S3 permissions are scoped to the four static origin
-buckets. The publication script also verifies the NonProd account ID before synchronizing
-any object.
+After the guarded infrastructure is separately reviewed and applied, a relevant merge to
+`main` automatically builds and publishes all four NonProd static applications. A manual
+`Deploy static apps` dispatch from `main`, with the NonProd confirmation input, remains
+available for recovery. The workflow has no production target and assumes the NonProd role
+only through the exact `nonprod-static` environment subject. The existing ECS deployment
+workflow continues to use the exact `main` branch subject. Its S3 permissions are scoped to
+the four static origin buckets. The publication script verifies the NonProd account ID and
+requires a commit-stamped `version.json` before synchronizing any object. After publication,
+the workflow confirms that the public Coach and Client staging aliases report the merged
+commit.
 
 The GitHub deployment role receives its four bucket-scoped publication permissions from
 the Compute module. Review and save both module targets together so the infrastructure and
