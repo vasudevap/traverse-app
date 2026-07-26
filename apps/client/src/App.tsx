@@ -14,6 +14,7 @@ import {
   EmptyState,
   Field,
   PageHeader,
+  PasswordField,
   TextInput,
   TileRow,
 } from '@traverse/ui';
@@ -367,6 +368,7 @@ function InvitationWelcome({
 }) {
   const [mode, setMode] = useState<'magic_link' | 'password'>('magic_link');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   return (
     <main className="onboarding-page">
       <a className="trv-wordmark" href="/" aria-label="Traverse client space">
@@ -388,7 +390,10 @@ function InvitationWelcome({
             <input
               checked={mode === 'magic_link'}
               name="account-mode"
-              onChange={() => setMode('magic_link')}
+              onChange={() => {
+                setMode('magic_link');
+                setPasswordVisible(false);
+              }}
               type="radio"
             />
             <span>
@@ -410,16 +415,18 @@ function InvitationWelcome({
           </label>
         </div>
         {mode === 'password' ? (
-          <Field hint="At least 10 characters" label="Password">
-            <TextInput
-              autoComplete="new-password"
-              minLength={10}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </Field>
+          <PasswordField
+            autoComplete="new-password"
+            hint="At least 10 characters"
+            id="client-invitation-password"
+            label="Password"
+            minLength={10}
+            onChange={(event) => setPassword(event.target.value)}
+            onVisibilityChange={setPasswordVisible}
+            required
+            value={password}
+            visible={passwordVisible}
+          />
         ) : null}
         <div className="onboarding-actions">
           <Button

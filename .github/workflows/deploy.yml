@@ -38,6 +38,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Set up ARM64 emulation
         uses: docker/setup-qemu-action@v3
 
@@ -71,6 +76,13 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: bash .github/scripts/deploy-ecs.sh
+
+      - name: Verify deployed API revision
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          REVISION_FIELD: revision
+          VERIFY_URLS: https://staging-api.traversecoaching.com/health
+        run: node .github/scripts/verify-deployed-revision.mjs
 
   deploy-prod:
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'prod'
