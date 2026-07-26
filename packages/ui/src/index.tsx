@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import {
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 
 /** Bearing tokens (50-design/design-system.md). */
 export const tokens = {
@@ -69,6 +74,63 @@ export function Field({ children, className = '', hint, label, ...props }: Field
 
 export function TextInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`trv-input ${className}`} {...props} />;
+}
+
+export type PasswordFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+  hint?: ReactNode;
+  id: string;
+  label: ReactNode;
+  onVisibilityChange(visible: boolean): void;
+  visible: boolean;
+};
+
+export function PasswordField({
+  'aria-describedby': describedBy,
+  className = '',
+  disabled,
+  hint,
+  id,
+  label,
+  onVisibilityChange,
+  visible,
+  ...props
+}: PasswordFieldProps) {
+  const hintId = hint ? `${id}-hint` : undefined;
+  const descriptionIds = [describedBy, hintId].filter(Boolean).join(' ') || undefined;
+
+  return (
+    <div className="trv-field">
+      <label className="trv-field__label" htmlFor={id}>
+        {label}
+      </label>
+      <span className="trv-password-input">
+        <input
+          {...props}
+          aria-describedby={descriptionIds}
+          className={`trv-input ${className}`}
+          disabled={disabled}
+          id={id}
+          type={visible ? 'text' : 'password'}
+        />
+        <button
+          aria-controls={id}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          aria-pressed={visible}
+          className="trv-password-input__toggle"
+          disabled={disabled}
+          onClick={() => onVisibilityChange(!visible)}
+          type="button"
+        >
+          {visible ? 'Hide' : 'Show'}
+        </button>
+      </span>
+      {hint ? (
+        <span className="trv-field__hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export type NavigationItem = {

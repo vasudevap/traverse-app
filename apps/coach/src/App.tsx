@@ -19,7 +19,16 @@ import {
   type PracticeExportSummary,
   type SetupStep,
 } from '@traverse/api-client';
-import { AppShell, Badge, Button, Card, Field, PageHeader, TextInput } from '@traverse/ui';
+import {
+  AppShell,
+  Badge,
+  Button,
+  Card,
+  Field,
+  PageHeader,
+  PasswordField,
+  TextInput,
+} from '@traverse/ui';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   defaultEligibleRelationshipId,
@@ -2015,6 +2024,7 @@ function CoachSignIn({
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -2044,16 +2054,17 @@ function CoachSignIn({
               value={email}
             />
           </Field>
-          <Field label="Password">
-            <TextInput
-              autoComplete="current-password"
-              disabled={busy}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </Field>
+          <PasswordField
+            autoComplete="current-password"
+            disabled={busy}
+            id="coach-signin-password"
+            label="Password"
+            onChange={(event) => setPassword(event.target.value)}
+            onVisibilityChange={setPasswordVisible}
+            required
+            value={password}
+            visible={passwordVisible}
+          />
           <Button disabled={busy} type="submit">
             {busy ? 'Signing in...' : 'Sign in'}
           </Button>
@@ -2111,6 +2122,7 @@ function CoachSignup() {
   const [acceptableUseAccepted, setAcceptableUseAccepted] = useState(false);
   const [restrictedCredentialAttestation, setRestrictedCredentialAttestation] = useState(false);
   const [restrictedNonClinicalAttestation, setRestrictedNonClinicalAttestation] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2341,19 +2353,24 @@ function CoachSignup() {
             <Field label="Email address">
               <TextInput autoComplete="email" name="email" required type="email" />
             </Field>
-            <Field label="Password" hint="At least 12 characters">
-              <TextInput
-                autoComplete="new-password"
-                minLength={12}
-                name="password"
-                required
-                type="password"
-              />
-            </Field>
+            <PasswordField
+              autoComplete="new-password"
+              hint="At least 12 characters"
+              id="coach-signup-password"
+              label="Password"
+              minLength={12}
+              name="password"
+              onVisibilityChange={setPasswordVisible}
+              required
+              visible={passwordVisible}
+            />
             <div className="coach-access__actions">
               <button
                 className="coach-access__back"
-                onClick={() => setStep('agreements')}
+                onClick={() => {
+                  setPasswordVisible(false);
+                  setStep('agreements');
+                }}
                 type="button"
               >
                 Back
