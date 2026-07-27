@@ -4,6 +4,7 @@ import type {
   ClientOnboardingActor,
   CoachOnboardingActor,
 } from '../src/client-onboarding.service.js';
+import { clientCoachingContext } from '../src/coaching-loop-store.js';
 import type { AppointmentSnapshot, CoachingLoopStore } from '../src/coaching-loop.service.js';
 import { CoachingLoopService } from '../src/coaching-loop.service.js';
 
@@ -23,6 +24,23 @@ const relationshipId = '66666666-6666-4666-8666-666666666666';
 const appointmentId = '77777777-7777-4777-8777-777777777777';
 const appointmentTypeId = '88888888-8888-4888-8888-888888888888';
 const holdId = '99999999-9999-4999-8999-999999999999';
+
+test('TRA-41 preserves the assigned coach in the client RLS context', () => {
+  assert.deepEqual(
+    clientCoachingContext(client, {
+      coachId: coach.coachId,
+      id: relationshipId,
+      tenantId: coach.tenantId,
+    }),
+    {
+      actorId: client.userId,
+      clientId: client.clientId,
+      coachId: coach.coachId,
+      role: 'client',
+      tenantId: coach.tenantId,
+    },
+  );
+});
 
 function memoryStore(overrides: Partial<CoachingLoopStore>): CoachingLoopStore {
   return new Proxy(overrides, {

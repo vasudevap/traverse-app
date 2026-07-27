@@ -10,6 +10,10 @@ import {
   type IntakeAnswerEncryptor,
 } from '../../../apps/api/src/client-onboarding-store.js';
 import {
+  DatabaseCoachingLoopStore,
+  type RelationshipNotesCipher,
+} from '../../../apps/api/src/coaching-loop-store.js';
+import {
   assertRlsContract,
   CLIENT_INTAKE_FORM_READ_MIGRATION_NAME,
   DatabaseAuthSessionStore,
@@ -1565,6 +1569,27 @@ if (databaseUrl === undefined || databaseUrl === '') {
     assert.equal(submitted.state, 'active');
     assert.equal(submitted.intake?.submitted, true);
     assert.equal(sentJobCount, 3);
+
+    const notesCipher: RelationshipNotesCipher = {
+      async decrypt() {
+        return '';
+      },
+      async encrypt() {
+        return Buffer.alloc(64, 0);
+      },
+    };
+    const loopStore = new DatabaseCoachingLoopStore(runtimeDatabase, boss, notesCipher, {
+      clientAppBaseUrl: 'https://client.example.test',
+      coachAppBaseUrl: 'https://coach.example.test',
+      emailFrom: 'Traverse <notifications@example.test>',
+    });
+    const home = await loopStore.getClientHome(actor);
+    assert.equal(home.relationships.length, 1);
+    assert.equal(home.relationships[0]?.id, created.relationshipId);
+    assert.deepEqual(home.relationships[0]?.coach, {
+      name: 'Owner A',
+      practiceName: 'Tenant A',
+    });
   });
 
   test('G4 audit reports missing tenant safeguards', async () => {

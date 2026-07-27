@@ -38,7 +38,8 @@ interface StoreConfig {
   emailFrom: string;
 }
 
-interface RelationshipScope {
+export interface ClientRelationshipScope {
+  coachId: string;
   id: string;
   tenantId: string;
 }
@@ -131,12 +132,16 @@ function coachContext(actor: CoachOnboardingActor) {
   };
 }
 
-function clientContext(actor: ClientOnboardingActor, tenantId: string) {
+export function clientCoachingContext(
+  actor: ClientOnboardingActor,
+  scope: ClientRelationshipScope,
+) {
   return {
     actorId: actor.userId,
     clientId: actor.clientId,
+    coachId: scope.coachId,
     role: 'client' as const,
-    tenantId,
+    tenantId: scope.tenantId,
   };
 }
 
@@ -334,7 +339,7 @@ async function groups(transaction: TenantTransaction, coachId: string): Promise<
 async function clientRelationshipScopes(
   database: TraverseDatabaseClient,
   actor: ClientOnboardingActor,
-): Promise<RelationshipScope[]> {
+): Promise<ClientRelationshipScope[]> {
   return database.transaction().execute(async (transaction) => {
     await sql`
       SELECT
@@ -345,15 +350,19 @@ async function clientRelationshipScopes(
         set_config('app.client_id', ${actor.clientId}, true),
         set_config('app.practice_role', '', true)
     `.execute(transaction);
-    const result = await sql<{ id: string; tenant_id: string }>`
-      SELECT id, tenant_id
+    const result = await sql<{ coach_id: string; id: string; tenant_id: string }>`
+      SELECT coach_id, id, tenant_id
       FROM app.coaching_relationships
       WHERE client_id = ${actor.clientId}
         AND status = 'active'
         AND archived_at IS NULL
       ORDER BY created_at
     `.execute(transaction);
-    return result.rows.map((row) => ({ id: row.id, tenantId: row.tenant_id }));
+    return result.rows.map((row) => ({
+      coachId: row.coach_id,
+      id: row.id,
+      tenantId: row.tenant_id,
+    }));
   });
 }
 
@@ -361,7 +370,7 @@ async function relationshipScope(
   database: TraverseDatabaseClient,
   actor: ClientOnboardingActor,
   relationshipId: string,
-): Promise<RelationshipScope | undefined> {
+): Promise<ClientRelationshipScope | undefined> {
   return (await clientRelationshipScopes(database, actor)).find(
     (item) => item.id === relationshipId,
   );
@@ -1264,7 +1273,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     for (const scope of scopes) {
       await withTenantContext(
         this.database,
-        clientContext(actor, scope.tenantId),
+        clientCoachingContext(actor, scope),
         async (transaction) => {
           const database = transaction.withSchema('app');
           const relationship = await database
@@ -1370,7 +1379,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     if (scope === undefined) return undefined;
     return withTenantContext(
       this.database,
-      clientContext(actor, scope.tenantId),
+      clientCoachingContext(actor, scope),
       async (transaction) => {
         const database = transaction.withSchema('app');
         const slot = await database
@@ -1430,7 +1439,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     if (scope === undefined) return undefined;
     return withTenantContext(
       this.database,
-      clientContext(actor, scope.tenantId),
+      clientCoachingContext(actor, scope),
       async (transaction) => {
         const database = transaction.withSchema('app');
         const hold = await database
@@ -1508,7 +1517,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     for (const scope of await clientRelationshipScopes(this.database, actor)) {
       const released = await withTenantContext(
         this.database,
-        clientContext(actor, scope.tenantId),
+        clientCoachingContext(actor, scope),
         async (transaction) => {
           const updated = await transaction
             .withSchema('app')
@@ -1534,7 +1543,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     for (const scope of await clientRelationshipScopes(this.database, actor)) {
       const task = await withTenantContext(
         this.database,
-        clientContext(actor, scope.tenantId),
+        clientCoachingContext(actor, scope),
         async (transaction) => {
           const updated = await transaction
             .withSchema('app')
@@ -1571,7 +1580,7 @@ export class DatabaseCoachingLoopStore implements CoachingLoopStore {
     for (const scope of await clientRelationshipScopes(this.database, actor)) {
       const appointment = await withTenantContext(
         this.database,
-        clientContext(actor, scope.tenantId),
+        clientCoachingContext(actor, scope),
         async (transaction) => {
           const row = (await appointmentRows(transaction)).find(
             (item) => item.id === appointmentId,
