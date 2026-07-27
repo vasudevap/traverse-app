@@ -5,3 +5,8 @@ export const COACH_PRACTICE_SETUP_PATH = '/settings/practice';
 export function isCoachDashboardPath(pathname: string) {
   return pathname === COACH_DASHBOARD_PATH;
 }
+
+export function isCoachNavigationItemCurrent(href: string, pathname: string) {
+  if (href === '/logout') return false;
+  return href === COACH_DASHBOARD_PATH ? isCoachDashboardPath(pathname) : pathname === href;
+}

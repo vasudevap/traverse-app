@@ -271,7 +271,7 @@ test('TRA-39 validates and confirms a tenant-scoped profile photo upload', async
   );
 });
 
-test('TRA-93 presigns browser profile-photo uploads without an empty-body checksum', async () => {
+test('TRA-93 and TRA-99 presign PNG profile-photo uploads without an empty-body checksum', async () => {
   const originalAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const originalRegion = process.env.AWS_REGION;
   const originalSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;

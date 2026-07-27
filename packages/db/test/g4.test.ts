@@ -1494,7 +1494,7 @@ if (databaseUrl === undefined || databaseUrl === '') {
     assert.equal(deleteState, '42501');
   });
 
-  test('database-backed client onboarding completes through the production store', async () => {
+  test('TRA-96 and TRA-97 complete database-backed Client onboarding and Coach progress', async () => {
     let sentJobCount = 0;
     const boss = {
       async send() {
@@ -1563,13 +1563,6 @@ if (databaseUrl === undefined || databaseUrl === '') {
     assert.notEqual(signed.intake, null);
     assert.equal(signed.intake?.id, intakeFormA);
 
-    const submitted = await service.submitIntake(actor, created.relationshipId, {
-      answers: { coaching_goals: 'Build a durable leadership practice.' },
-    });
-    assert.equal(submitted.state, 'active');
-    assert.equal(submitted.intake?.submitted, true);
-    assert.equal(sentJobCount, 3);
-
     const notesCipher: RelationshipNotesCipher = {
       async decrypt() {
         return '';
@@ -1583,6 +1576,25 @@ if (databaseUrl === undefined || databaseUrl === '') {
       coachAppBaseUrl: 'https://coach.example.test',
       emailFrom: 'Traverse <notifications@example.test>',
     });
+    const coachDashboard = await loopStore.getCoachDashboard({
+      coachId: ownerCoachA,
+      practiceRole: 'owner',
+      tenantId: tenantA,
+      userId: ownerUserA,
+    });
+    const onboardingRelationship = coachDashboard.relationships.find(
+      (item) => item.id === created.relationshipId,
+    );
+    assert.equal(onboardingRelationship?.health, 'onboarding');
+    assert.equal(onboardingRelationship?.onboardingState, 'intake_pending');
+
+    const submitted = await service.submitIntake(actor, created.relationshipId, {
+      answers: { coaching_goals: 'Build a durable leadership practice.' },
+    });
+    assert.equal(submitted.state, 'active');
+    assert.equal(submitted.intake?.submitted, true);
+    assert.equal(sentJobCount, 3);
+
     const home = await loopStore.getClientHome(actor);
     assert.equal(home.relationships.length, 1);
     assert.equal(home.relationships[0]?.id, created.relationshipId);

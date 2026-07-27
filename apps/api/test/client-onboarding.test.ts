@@ -309,7 +309,7 @@ test('TRA-40 exposes the preserved contract to its assigned coach for countersig
   assert.equal(contract.state, 'countersignature_pending');
 });
 
-test('TRA-40 rejects incomplete gate configuration and malformed intake answers', async () => {
+test('TRA-40 and TRA-102 reject incomplete gates and malformed intake answers', async () => {
   const store = new MemoryOnboardingStore();
   const service = new ClientOnboardingService(store);
   await assert.rejects(
@@ -319,6 +319,21 @@ test('TRA-40 rejects incomplete gate configuration and malformed intake answers'
       gates: { contractRequired: true, intakeRequired: true },
     }),
     /Select an agreement/,
+  );
+  await assert.rejects(
+    service.createInvite(coach, {
+      clientName: 'Alex Rivera',
+      contractTemplateId: templateId,
+      email: 'alex@example.test',
+      gates: {
+        contractRequired: true,
+        countersignatureRequired: false,
+        intakeRequired: true,
+        paymentRequired: false,
+      },
+      intakeFormId: null,
+    }),
+    /Select an intake form/,
   );
   await assert.rejects(
     service.submitIntake(client, relationshipId, {

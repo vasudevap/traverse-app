@@ -245,3 +245,52 @@ test('TRA-38 Stripe Flow B webhook adapter verifies signed raw payloads', async 
     /signature verification failed|signature header is invalid/,
   );
 });
+
+test('TRA-43 keeps Flow B Stripe price selection on stable plan codes', async () => {
+  const requests: Array<{ body: URLSearchParams; path: string }> = [];
+  const client = new StripeFlowBBillingClient(
+    JSON.stringify({
+      priceIds: {
+        established: { annual: 'price_premium_annual' },
+        practice: { monthly: 'price_pro_monthly' },
+        starter: { monthly: 'price_basic_monthly' },
+      },
+      secretKey: 'sk_test_123',
+    }),
+    async (input, init) => {
+      const url = new URL(String(input));
+      requests.push({
+        body: new URLSearchParams(init?.body as URLSearchParams),
+        path: url.pathname,
+      });
+      const response = url.pathname.endsWith('/customers')
+        ? { id: 'cus_stage2' }
+        : { id: 'sub_stage2' };
+      return new Response(JSON.stringify(response), { status: 200 });
+    },
+  );
+
+  await client.createTrialSubscription({
+    billingInterval: 'monthly',
+    email: 'coach@example.test',
+    name: 'Coach Example',
+    planCode: 'practice',
+    promotionCode: null,
+    tenantId: '00000000-0000-7000-8000-000000000001',
+    trialDays: 14,
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]?.path, '/v1/customers');
+  assert.equal(requests[1]?.path, '/v1/subscriptions');
+  assert.equal(requests[1]?.body.get('items[0][price]'), 'price_pro_monthly');
+  assert.equal(
+    requests[1]?.body.get('metadata[tenant_id]'),
+    '00000000-0000-7000-8000-000000000001',
+  );
+  assert.equal(
+    requests[1]?.body.get('trial_settings[end_behavior][missing_payment_method]'),
+    'pause',
+  );
+  assert.equal(requests[1]?.body.has('promotion_code'), false);
+});
