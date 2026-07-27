@@ -2032,7 +2032,7 @@ function CoachSignIn({
   }
 
   return (
-    <main className="load-state coach-access">
+    <main className="load-state coach-access coach-access--centred">
       <span className="trv-wordmark">Traverse</span>
       <Card>
         <div className="trv-eyebrow">Coach app</div>
@@ -2180,7 +2180,7 @@ function CoachSignup() {
 
   if (submittedEmail !== null) {
     return (
-      <main className="load-state coach-access">
+      <main className="load-state coach-access coach-access--centred">
         <span className="trv-wordmark">Traverse</span>
         <Card>
           <div className="trv-eyebrow">Coach account</div>

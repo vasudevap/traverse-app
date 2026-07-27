@@ -620,6 +620,16 @@
   place-content: start center;
 }
 
+.coach-access--centred {
+  position: relative;
+}
+
+.coach-access--centred > .trv-wordmark {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+}
+
 .coach-access__progress {
   display: flex;
   gap: 8px;
