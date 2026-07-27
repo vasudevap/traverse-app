@@ -11,6 +11,7 @@ import {
   COACH_DASHBOARD_PATH,
   COACH_PRACTICE_SETUP_PATH,
   isCoachDashboardPath,
+  isCoachNavigationItemCurrent,
 } from '../src/routes.js';
 import { onboardingDefaultsFormState } from '../src/onboarding-defaults.js';
 import { policyDefaultsFormState } from '../src/policy-defaults.js';
@@ -71,6 +72,16 @@ test('TRA-92 invitation confirmation returns to the routed Coach dashboard', () 
   assert.equal(COACH_DASHBOARD_PATH, '/dashboard');
   assert.equal(isCoachDashboardPath(COACH_DASHBOARD_PATH), true);
   assert.equal(isCoachDashboardPath('/'), false);
+});
+
+test('TRA-94 derives the active Coach navigation item from the current route', () => {
+  assert.equal(isCoachNavigationItemCurrent('/dashboard', '/dashboard'), true);
+  assert.equal(isCoachNavigationItemCurrent('/dashboard', '/clients'), false);
+  assert.equal(isCoachNavigationItemCurrent('/clients', '/clients'), true);
+  assert.equal(isCoachNavigationItemCurrent('/calendar', '/calendar'), true);
+  assert.equal(isCoachNavigationItemCurrent('/groups', '/groups'), true);
+  assert.equal(isCoachNavigationItemCurrent('/settings/data', '/settings/data'), true);
+  assert.equal(isCoachNavigationItemCurrent('/logout', '/logout'), false);
 });
 
 test('dashboard users have a dedicated route back to practice setup', () => {

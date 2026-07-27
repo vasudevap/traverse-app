@@ -38,7 +38,12 @@ import {
 } from './relationships.js';
 import { onboardingDefaultsFormState } from './onboarding-defaults.js';
 import { policyDefaultsFormState } from './policy-defaults.js';
-import { COACH_DASHBOARD_PATH, COACH_PRACTICE_SETUP_PATH, isCoachDashboardPath } from './routes.js';
+import {
+  COACH_DASHBOARD_PATH,
+  COACH_PRACTICE_SETUP_PATH,
+  isCoachDashboardPath,
+  isCoachNavigationItemCurrent,
+} from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
 const authApi = createAuthApiClient();
@@ -59,10 +64,7 @@ const navigationItems = [
 function coachNavigation(pathname = window.location.pathname) {
   return navigationItems.map((item) => ({
     ...item,
-    current:
-      item.href === COACH_DASHBOARD_PATH
-        ? isCoachDashboardPath(pathname)
-        : item.href !== '/logout' && pathname === item.href,
+    current: isCoachNavigationItemCurrent(item.href, pathname),
   }));
 }
 

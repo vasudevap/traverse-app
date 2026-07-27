@@ -19,6 +19,7 @@ import {
   TileRow,
 } from '@traverse/ui';
 import { type FormEvent, useEffect, useState } from 'react';
+import { missingIntakeWaitingCopy } from './onboarding-copy.js';
 
 const onboardingApi = createClientOnboardingApiClient();
 const loopApi = createClientLoopApiClient();
@@ -474,6 +475,7 @@ function OnboardingSteps({
     !snapshot.intake?.submitted &&
     !contractPending &&
     !countersignPending;
+  const missingIntakeCopy = missingIntakeWaitingCopy(snapshot.coach.name);
 
   function submitIntake(event: FormEvent) {
     event.preventDefault();
@@ -585,12 +587,10 @@ function OnboardingSteps({
   } else if (intakePending) {
     content = (
       <Card className="onboarding-waiting">
-        <Badge tone="mark">Intake setup needs attention</Badge>
-        <h1>Your coach is updating the next step.</h1>
-        <p>
-          Your agreement is safely signed. You do not need to sign again. Please return shortly
-          after your coach restores the intake form.
-        </p>
+        <Badge tone="mark">{missingIntakeCopy.badge}</Badge>
+        <h1>{missingIntakeCopy.title}</h1>
+        <p>{missingIntakeCopy.body}</p>
+        <p>{missingIntakeCopy.support}</p>
       </Card>
     );
   } else {
