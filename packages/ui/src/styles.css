@@ -16,6 +16,7 @@
   --trv-mark-text: #9a6a12;
   --trv-line: #d0e2f0;
   --trv-danger: #c0392b;
+  --trv-control-height: 44px;
   --trv-radius-sm: 8px;
   --trv-radius-button: 10px;
   --trv-shadow: 0 1px 2px rgba(17, 40, 63, 0.04), 0 8px 30px rgba(17, 40, 63, 0.06);
@@ -42,7 +43,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -281,7 +284,7 @@ a {
   border: 1px solid var(--trv-line);
   border-radius: var(--trv-radius-sm);
   color: var(--trv-text);
-  min-height: 42px;
+  min-height: var(--trv-control-height);
   padding: 9px 12px;
 }
 
