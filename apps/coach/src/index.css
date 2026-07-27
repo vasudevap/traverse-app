@@ -232,7 +232,7 @@
 
 .setup-select {
   display: block;
-  height: 42px;
+  height: var(--trv-control-height);
   line-height: 1.5;
   width: 100%;
   appearance: auto;

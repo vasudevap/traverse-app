@@ -4,18 +4,33 @@ import test from 'node:test';
 
 const appSource = readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const stylesheet = readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const uiStylesheet = readFile(
+  new URL('../../../packages/ui/src/styles.css', import.meta.url),
+  'utf8',
+);
 
 test('TRA-95, TRA-98, and TRA-101 keep setup controls on the shared alignment contract', async () => {
-  const [source, css] = await Promise.all([appSource, stylesheet]);
+  const [source, css, uiCss] = await Promise.all([appSource, stylesheet, uiStylesheet]);
 
   for (const label of ['Invitation expires after', 'Timezone', 'Refund approach']) {
     assert.match(source, new RegExp(`<Field(?: hint="[^"]*")? label="${label}">`));
   }
+  for (const label of ['Invitation expires after', 'Refund approach']) {
+    assert.match(
+      source,
+      new RegExp(
+        `<Field(?: hint="[^"]*")? label="${label}">[\\s\\S]{0,500}?className="trv-input setup-select"`,
+      ),
+    );
+  }
+  assert.match(uiCss, /--trv-control-height:\s*44px;/);
+  assert.match(uiCss, /button,\s*input,\s*select,\s*textarea\s*\{\s*font:\s*inherit;/);
+  assert.match(uiCss, /\.trv-input\s*\{[\s\S]*?min-height:\s*var\(--trv-control-height\);/);
   assert.match(css, /\.setup-form__grid > \.trv-field\s*\{\s*align-content: start;/);
   assert.match(css, /\.setup-form__grid \.trv-input\s*\{\s*width: 100%;/);
   assert.match(
     css,
-    /\.setup-select\s*\{[\s\S]*?display: block;[\s\S]*?height: 42px;[\s\S]*?width: 100%;/,
+    /\.setup-select\s*\{[\s\S]*?display: block;[\s\S]*?height: var\(--trv-control-height\);[\s\S]*?width: 100%;/,
   );
 });
 
