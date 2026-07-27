@@ -621,6 +621,9 @@
 }
 
 .coach-access--centred {
+  align-items: center;
+  display: flex;
+  justify-content: center;
   position: relative;
 }
 
