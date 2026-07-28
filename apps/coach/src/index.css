@@ -157,7 +157,7 @@
 
 .setup-checklist__item--complete .setup-checklist__number {
   border-color: var(--trv-accent);
-  background: var(--trv-accent);
+  background: var(--trv-action-primary);
   color: white;
 }
 
@@ -508,7 +508,7 @@
   align-items: center;
   padding: 9px 18px;
   border-radius: var(--trv-radius-button);
-  background: var(--trv-accent);
+  background: var(--trv-action-primary);
   color: white;
   font-weight: 600;
 }
