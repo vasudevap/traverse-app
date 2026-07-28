@@ -12,6 +12,8 @@
   --trv-text-secondary: #5a7a9a;
   --trv-accent: #2e8b7a;
   --trv-accent-strong: #1d6b5c;
+  --trv-action-primary: #2a806f;
+  --trv-action-primary-hover: #1d6b5c;
   --trv-mark: #e8a020;
   --trv-mark-text: #9a6a12;
   --trv-line: #d0e2f0;
@@ -179,12 +181,12 @@ a {
 }
 
 .trv-button--primary {
-  background: var(--trv-accent);
+  background: var(--trv-action-primary);
   color: white;
 }
 
 .trv-button--primary:hover:not(:disabled) {
-  background: var(--trv-accent-strong);
+  background: var(--trv-action-primary-hover);
 }
 
 .trv-button--line {

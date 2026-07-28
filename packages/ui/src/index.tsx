@@ -15,6 +15,8 @@ export const tokens = {
   textSecondary: '#5A7A9A',
   accent: '#2E8B7A',
   accentStrong: '#1D6B5C',
+  actionPrimary: '#2A806F',
+  actionPrimaryHover: '#1D6B5C',
   mark: '#E8A020',
   markText: '#9A6A12',
   line: '#D0E2F0',

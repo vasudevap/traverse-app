@@ -99,7 +99,7 @@
   height: 46px;
   place-items: center;
   border-radius: 50%;
-  background: var(--trv-accent);
+  background: var(--trv-action-primary);
   color: white;
   font-weight: 700;
 }
@@ -234,7 +234,7 @@
   place-items: center;
   margin: 0 auto 20px;
   border-radius: 50%;
-  background: var(--trv-accent);
+  background: var(--trv-action-primary);
   color: white;
   font-size: 26px;
 }
