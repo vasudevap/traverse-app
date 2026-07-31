@@ -1968,6 +1968,26 @@ function CoachWorkspacePage({ relationshipId }: { relationshipId: string }) {
   );
 }
 
+function CoachAccessShell({
+  busy,
+  children,
+  wide = false,
+}: {
+  busy?: boolean;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <main
+      aria-busy={busy}
+      className={`load-state coach-access${wide ? ' coach-access--wide' : ''}`}
+    >
+      <span className="trv-wordmark">Traverse</span>
+      {children}
+    </main>
+  );
+}
+
 function LoadError({ error, onRetry }: { error: string; onRetry(): void }) {
   return (
     <main className="load-state">
@@ -1995,8 +2015,7 @@ function CoachSignOut() {
   }, []);
 
   return (
-    <main className="load-state" aria-busy={error === null}>
-      <span className="trv-wordmark">Traverse</span>
+    <CoachAccessShell busy={error === null}>
       <Card>
         <div className="trv-eyebrow">Coach account</div>
         <h1>{error ? 'We could not sign you out.' : 'Signing you out...'}</h1>
@@ -2008,10 +2027,10 @@ function CoachSignOut() {
             </Button>
           </>
         ) : (
-          <p>Closing your Coach App session.</p>
+          <p role="status">Closing your Coach App session.</p>
         )}
       </Card>
-    </main>
+    </CoachAccessShell>
   );
 }
 
@@ -2034,8 +2053,7 @@ function CoachSignIn({
   }
 
   return (
-    <main className="load-state coach-access coach-access--centred">
-      <span className="trv-wordmark">Traverse</span>
+    <CoachAccessShell>
       <Card>
         <div className="trv-eyebrow">Coach app</div>
         <h1>Welcome back.</h1>
@@ -2075,7 +2093,7 @@ function CoachSignIn({
           New to Traverse? <a href="/signup">Create your coach account.</a>
         </p>
       </Card>
-    </main>
+    </CoachAccessShell>
   );
 }
 
@@ -2182,8 +2200,7 @@ function CoachSignup() {
 
   if (submittedEmail !== null) {
     return (
-      <main className="load-state coach-access coach-access--centred">
-        <span className="trv-wordmark">Traverse</span>
+      <CoachAccessShell>
         <Card>
           <div className="trv-eyebrow">Coach account</div>
           <h1>Check your email.</h1>
@@ -2192,13 +2209,12 @@ function CoachSignup() {
             <a href="/">Return to sign in</a>
           </p>
         </Card>
-      </main>
+      </CoachAccessShell>
     );
   }
 
   return (
-    <main className="load-state coach-access coach-access--wide">
-      <span className="trv-wordmark">Traverse</span>
+    <CoachAccessShell wide>
       <Card>
         <div className="coach-access__progress" aria-label="Signup progress">
           <span className={step === 'plan' ? 'is-current' : ''}>1 Plan</span>
@@ -2387,7 +2403,7 @@ function CoachSignup() {
           Already have an account? <a href="/">Sign in</a>
         </p>
       </Card>
-    </main>
+    </CoachAccessShell>
   );
 }
 
@@ -2408,8 +2424,7 @@ function CoachEmailVerification() {
   }, []);
 
   return (
-    <main className="load-state coach-access">
-      <span className="trv-wordmark">Traverse</span>
+    <CoachAccessShell busy={status === 'loading' && error === null}>
       <Card>
         <div className="trv-eyebrow">Coach account</div>
         <h1>{status === 'verified' ? 'Your email is verified.' : 'Verifying your email...'}</h1>
@@ -2424,7 +2439,7 @@ function CoachEmailVerification() {
           </p>
         ) : null}
       </Card>
-    </main>
+    </CoachAccessShell>
   );
 }
 
@@ -2972,10 +2987,9 @@ function CoachSetupApp({ review = false }: { review?: boolean }) {
   if (loadError !== null) return <LoadError error={loadError} onRetry={() => void load()} />;
   if (snapshot === null) {
     return (
-      <main className="load-state" aria-busy="true">
-        <span className="trv-wordmark">Traverse</span>
-        <p>Opening your practice setup...</p>
-      </main>
+      <CoachAccessShell busy>
+        <p role="status">Opening your practice setup...</p>
+      </CoachAccessShell>
     );
   }
   if (activeStep === 'dashboard') return <CoachDashboard />;

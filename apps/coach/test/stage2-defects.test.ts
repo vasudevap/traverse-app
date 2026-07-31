@@ -37,6 +37,14 @@ function contrastRatio(foreground: string, background: string): number {
   );
 }
 
+function functionSource(source: string, name: string, nextName: string): string {
+  const start = source.indexOf(`function ${name}`);
+  const end = source.indexOf(`function ${nextName}`, start + 1);
+  assert.notEqual(start, -1, `Expected function ${name}`);
+  assert.notEqual(end, -1, `Expected function ${nextName}`);
+  return source.slice(start, end);
+}
+
 test('TRA-95, TRA-98, and TRA-101 keep setup controls on the shared alignment contract', async () => {
   const [source, css, uiCss] = await Promise.all([appSource, stylesheet, uiStylesheet]);
 
@@ -100,4 +108,46 @@ test('TRA-104 keeps shared primary actions above the WCAG AA text contrast minim
   );
   assert.match(source, new RegExp(`actionPrimary:\\s*'${primary.toUpperCase()}'`));
   assert.match(source, new RegExp(`actionPrimaryHover:\\s*'${hover.toUpperCase()}'`));
+});
+
+test('TRA-105 keeps Coach access branding stable through every access transition', async () => {
+  const [source, css] = await Promise.all([appSource, stylesheet]);
+  const shell = functionSource(source, 'CoachAccessShell', 'LoadError');
+  const signOut = functionSource(source, 'CoachSignOut', 'CoachSignIn');
+  const signIn = functionSource(source, 'CoachSignIn', 'CoachSignup');
+  const signup = functionSource(source, 'CoachSignup', 'CoachEmailVerification');
+  const verification = functionSource(
+    source,
+    'CoachEmailVerification',
+    'CoachContractSignaturePage',
+  );
+  const setup = functionSource(source, 'CoachSetupApp', 'DataPortabilityPage');
+
+  assert.match(
+    shell,
+    /className=\{`load-state coach-access\$\{wide \? ' coach-access--wide' : ''\}`\}/,
+  );
+  assert.match(shell, /<span className="trv-wordmark">Traverse<\/span>\s*\{children\}/);
+  assert.match(
+    css,
+    /\.coach-access\s*\{[\s\S]*?align-items:\s*center;[\s\S]*?display:\s*flex;[\s\S]*?justify-content:\s*center;[\s\S]*?position:\s*relative;[\s\S]*?\}[\s\S]*?\.coach-access > \.trv-wordmark\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*24px;[\s\S]*?left:\s*24px;/,
+  );
+  assert.match(
+    css,
+    /\.coach-access--wide\s*\{[\s\S]*?display:\s*grid;[\s\S]*?place-content:\s*start center;[\s\S]*?padding-top:\s*88px;/,
+  );
+  assert.doesNotMatch(css, /coach-access--centred/);
+
+  assert.match(signOut, /<CoachAccessShell busy=\{error === null\}>/);
+  assert.match(signOut, /<p role="status">Closing your Coach App session\.<\/p>/);
+  assert.match(signIn, /<CoachAccessShell>\s*<Card>/);
+  assert.equal(signup.match(/<CoachAccessShell/g)?.length, 2);
+  assert.match(signup, /if \(submittedEmail !== null\)[\s\S]*?<CoachAccessShell>/);
+  assert.match(signup, /<CoachAccessShell wide>/);
+  assert.match(verification, /<CoachAccessShell busy=\{status === 'loading' && error === null\}>/);
+  assert.match(setup, /setSignInRequired\(false\);\s*await load\(\);/);
+  assert.match(
+    setup,
+    /if \(snapshot === null\)[\s\S]*?<CoachAccessShell busy>[\s\S]*?<p role="status">Opening your practice setup\.\.\.<\/p>/,
+  );
 });

@@ -612,25 +612,27 @@
   width: min(100%, 440px);
 }
 
-.coach-access--wide .trv-card {
-  width: min(760px, calc(100vw - 48px));
-}
-
-.coach-access--wide {
-  place-content: start center;
-}
-
-.coach-access--centred {
+.coach-access {
   align-items: center;
   display: flex;
   justify-content: center;
   position: relative;
 }
 
-.coach-access--centred > .trv-wordmark {
+.coach-access > .trv-wordmark {
   position: absolute;
   top: 24px;
   left: 24px;
+}
+
+.coach-access--wide .trv-card {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.coach-access--wide {
+  display: grid;
+  place-content: start center;
+  padding-top: 88px;
 }
 
 .coach-access__progress {
