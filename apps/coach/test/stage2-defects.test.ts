@@ -178,3 +178,28 @@ test('TRA-106 preserves the 1440px desktop rail and usable 390px mobile navigati
   );
   assert.match(uiCss, /:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--trv-accent\);/);
 });
+
+test('TRA-107 keeps long relationship content inside desktop and mobile cards', async () => {
+  const [source, css] = await Promise.all([appSource, stylesheet]);
+  const desktopRules = css.slice(0, css.indexOf('@media (max-width: 720px)'));
+  const mobileRules = css.slice(css.indexOf('@media (max-width: 720px)'));
+
+  assert.match(
+    source,
+    /<div className="coach-relationship-card__top">[\s\S]*?<Badge tone=\{healthTone\(relationship\.health\)\}>/,
+  );
+  assert.match(desktopRules, /\.coach-relationship-card[\s\S]*?min-width:\s*0;/);
+  assert.match(desktopRules, /\.coach-relationship-card__top > div\s*\{\s*min-width:\s*0;/);
+  assert.match(
+    desktopRules,
+    /\.coach-relationship-card__top > \.trv-badge\s*\{\s*flex:\s*0 0 auto;/,
+  );
+  assert.match(
+    desktopRules,
+    /\.coach-relationship-card__top span\s*\{\s*overflow-wrap:\s*anywhere;/,
+  );
+  assert.match(
+    mobileRules,
+    /\.coach-relationship-grid\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/,
+  );
+});

@@ -1027,10 +1027,23 @@
 .coach-relationship-card,
 .coach-appointment-row,
 .coach-task-row {
+  min-width: 0;
   padding: 18px;
   border: 1px solid var(--trv-line);
   border-radius: var(--trv-radius-sm);
   background: var(--trv-surface-panel);
+}
+
+.coach-relationship-card__top > div {
+  min-width: 0;
+}
+
+.coach-relationship-card__top > .trv-badge {
+  flex: 0 0 auto;
+}
+
+.coach-relationship-card__top span {
+  overflow-wrap: anywhere;
 }
 
 .coach-relationship-card__facts {
@@ -1066,6 +1079,12 @@
   grid-template-columns: none !important;
   align-items: center;
   gap: 10px !important;
+}
+
+@media (max-width: 720px) {
+  .coach-relationship-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .coach-loop-check input {
