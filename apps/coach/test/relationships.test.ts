@@ -10,6 +10,7 @@ import {
 import {
   COACH_DASHBOARD_PATH,
   COACH_PRACTICE_SETUP_PATH,
+  coachNavigation,
   isCoachDashboardPath,
   isCoachNavigationItemCurrent,
 } from '../src/routes.js';
@@ -82,6 +83,22 @@ test('TRA-94 derives the active Coach navigation item from the current route', (
   assert.equal(isCoachNavigationItemCurrent('/groups', '/groups'), true);
   assert.equal(isCoachNavigationItemCurrent('/settings/data', '/settings/data'), true);
   assert.equal(isCoachNavigationItemCurrent('/logout', '/logout'), false);
+});
+
+test('TRA-106 gives every signed-in Coach destination one active navigation item', () => {
+  for (const [pathname, label] of [
+    ['/dashboard', 'Dashboard'],
+    ['/clients', 'Clients'],
+    ['/calendar', 'Calendar'],
+    ['/groups', 'Groups'],
+    ['/settings/data', 'Data'],
+  ]) {
+    const currentItems = coachNavigation(pathname).filter((item) => item.current);
+    assert.deepEqual(
+      currentItems.map((item) => item.label),
+      [label],
+    );
+  }
 });
 
 test('dashboard users have a dedicated route back to practice setup', () => {

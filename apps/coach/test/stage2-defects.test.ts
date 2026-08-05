@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const appSource = readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const routesSource = readFile(new URL('../src/routes.ts', import.meta.url), 'utf8');
 const stylesheet = readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 const clientStylesheet = readFile(new URL('../../client/src/index.css', import.meta.url), 'utf8');
 const uiStylesheet = readFile(
@@ -150,4 +151,30 @@ test('TRA-105 keeps Coach access branding stable through every access transition
     setup,
     /if \(snapshot === null\)[\s\S]*?<CoachAccessShell busy>[\s\S]*?<p role="status">Opening your practice setup\.\.\.<\/p>/,
   );
+});
+
+test('TRA-106 preserves the 1440px desktop rail and usable 390px mobile navigation', async () => {
+  const [routes, uiCss, ui] = await Promise.all([routesSource, uiStylesheet, uiSource]);
+  const shell = functionSource(ui, 'AppShell', 'PageHeader');
+  const desktopRules = uiCss.slice(0, uiCss.indexOf('@media (max-width: 720px)'));
+  const mobileRules = uiCss.slice(uiCss.indexOf('@media (max-width: 720px)'));
+  const mobileSidebar = mobileRules.match(/\.trv-sidebar\s*\{([^}]*)\}/)?.[1];
+
+  for (const label of ['Dashboard', 'Clients', 'Calendar', 'Groups', 'Data', 'Sign out']) {
+    assert.match(routes, new RegExp(`label: '${label}'`));
+  }
+  assert.equal(shell.match(/<Navigation items=\{navigation\} \/>/g)?.length, 1);
+  assert.match(desktopRules, /\.trv-sidebar\s*\{[\s\S]*?display:\s*flex;/);
+  assert.ok(mobileSidebar, 'Expected a mobile sidebar rule');
+  assert.match(mobileSidebar, /display:\s*block;/);
+  assert.doesNotMatch(mobileSidebar, /display:\s*none;/);
+  assert.match(
+    mobileRules,
+    /\.trv-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/,
+  );
+  assert.match(
+    mobileRules,
+    /\.trv-nav__item\s*\{[\s\S]*?min-height:\s*44px;[\s\S]*?place-items:\s*center;/,
+  );
+  assert.match(uiCss, /:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--trv-accent\);/);
 });

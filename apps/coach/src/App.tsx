@@ -41,8 +41,8 @@ import { policyDefaultsFormState } from './policy-defaults.js';
 import {
   COACH_DASHBOARD_PATH,
   COACH_PRACTICE_SETUP_PATH,
+  coachNavigation,
   isCoachDashboardPath,
-  isCoachNavigationItemCurrent,
 } from './routes.js';
 
 const setupApi = createCoachSetupApiClient();
@@ -52,23 +52,7 @@ const inviteApi = createCoachInviteApiClient();
 const contractApi = createCoachContractApiClient();
 const loopApi = createCoachLoopApiClient();
 const dataApi = createCoachDataPortabilityApiClient();
-const navigationItems = [
-  { href: COACH_DASHBOARD_PATH, label: 'Dashboard' },
-  { href: '/clients', label: 'Clients' },
-  { href: '/calendar', label: 'Calendar' },
-  { href: '/groups', label: 'Groups' },
-  { href: '/settings/data', label: 'Data' },
-  { href: '/logout', label: 'Sign out' },
-];
-
-function coachNavigation(pathname = window.location.pathname) {
-  return navigationItems.map((item) => ({
-    ...item,
-    current: isCoachNavigationItemCurrent(item.href, pathname),
-  }));
-}
-
-const navigation = coachNavigation();
+const navigation = coachNavigation(window.location.pathname);
 
 type SetupAction = () => Promise<CoachSetupSnapshot>;
 

@@ -385,7 +385,28 @@ a {
   }
 
   .trv-sidebar {
+    display: block;
+    padding: 8px 20px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--trv-line);
+  }
+
+  .trv-sidebar__brand,
+  .trv-sidebar > .trv-badge {
     display: none;
+  }
+
+  .trv-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .trv-nav__item {
+    display: grid;
+    min-height: 44px;
+    place-items: center;
+    padding: 8px 4px;
+    text-align: center;
   }
 
   .trv-shell__mobile-header {
