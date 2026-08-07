@@ -135,6 +135,10 @@ a {
   margin-bottom: 32px;
 }
 
+.trv-page-header > div {
+  min-width: 0;
+}
+
 .trv-page-header h1,
 .trv-card h2,
 .trv-empty-state h2 {
@@ -154,6 +158,10 @@ a {
 .trv-empty-state p {
   color: var(--trv-text-secondary);
   margin: 0;
+}
+
+.trv-page-header p {
+  overflow-wrap: anywhere;
 }
 
 .trv-page-header__actions {

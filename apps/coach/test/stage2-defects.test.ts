@@ -203,3 +203,15 @@ test('TRA-107 keeps long relationship content inside desktop and mobile cards', 
     /\.coach-relationship-grid\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/,
   );
 });
+
+test('TRA-107 keeps the mobile Coach client-workspace header within its container', async () => {
+  const [source, uiCss] = await Promise.all([appSource, uiStylesheet]);
+  const workspace = functionSource(source, 'CoachWorkspacePage', 'LoadError');
+
+  assert.match(
+    workspace,
+    /<PageHeader[\s\S]*?summary=\{`\$\{workspace\.client\.email\}\$\{workspace\.client\.phone \? ` · \$\{workspace\.client\.phone\}` : ''\}`\}/,
+  );
+  assert.match(uiCss, /\.trv-page-header > div\s*\{\s*min-width:\s*0;/);
+  assert.match(uiCss, /\.trv-page-header p\s*\{\s*overflow-wrap:\s*anywhere;/);
+});
